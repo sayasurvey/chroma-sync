@@ -1,4 +1,5 @@
 import os
+import subprocess
 from pathlib import Path
 
 import numpy as np
@@ -127,6 +128,150 @@ class ConversionEngine:
             correction_regions=correction_regions,
         )
 
+    def _render_psd_via_imagemagick(self, input_path: str, output_path: str) -> bool:
+        """ImageMagick CLI を直接呼び出して PSD を sRGB JPEG に変換する。
+
+        PSD に埋め込まれた CMYK ICC プロファイルをそのまま変換元として使用し、
+        sRGB へ直接変換する。+profile * で埋め込みプロファイルを削除すると
+        誤ったソースプロファイルが適用されて色ずれが発生するため、
+        埋め込みプロファイルが存在する場合は保持して変換する。
+
+        Args:
+            input_path: PSD ファイルのパス
+            output_path: 出力 JPEG のパス
+
+        Returns:
+            成功した場合 True
+        """
+        srgb_path = self._profile_manager._find_profile(ColorProfileManager.SRGB_PROFILE_PATHS)
+        if not srgb_path:
+            return False
+
+        # PSD に埋め込みプロファイルがあるかチェック
+        source_profile = self._profile_manager.get_icc_profile(input_path)
+        has_embedded_profile = source_profile is not None and len(source_profile) > 4
+
+        cmd = [
+            "convert",
+            "-density", "300",
+            f"{input_path}[0]",
+        ]
+
+        if not has_embedded_profile:
+            # 埋め込みプロファイルがない場合のみデフォルト CMYK プロファイルを割り当て
+            # （ImageMagick に変換元の色空間を伝えるため）
+            cmyk_path = self._profile_manager._find_profile(ColorProfileManager.CMYK_PROFILE_PATHS)
+            if cmyk_path:
+                cmd += ["-profile", cmyk_path]
+
+        # 埋め込みプロファイル（または割り当てたプロファイル）から sRGB へ変換
+        # -intent Perceptual + 黒点補正で視覚的に正確な色変換を行う
+        cmd += [
+            "-intent", "Perceptual",
+            "-black-point-compensation",
+            "-profile", srgb_path,
+            "-quality", "92",
+            output_path,
+        ]
+
+        try:
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+            return result.returncode == 0 and Path(output_path).exists()
+        except (subprocess.SubprocessError, FileNotFoundError, OSError):
+            return False
+
+    def _render_ai_via_ghostscript(self, input_path: str, output_path: str) -> bool:
+        """Ghostscript を直接呼び出して AI ファイルを PNG にレンダリングする。
+
+        ImageMagick 経由の Ghostscript 呼び出しでは ICC カラーマネジメントが
+        正しく適用されないため、直接 Ghostscript を起動して -dUseCIEColor と
+        ICC プロファイルを明示的に指定することで正確な色再現を行う。
+
+        Args:
+            input_path: AI ファイルのパス
+            output_path: 出力 PNG のパス
+
+        Returns:
+            成功した場合 True
+        """
+        # P3 優先（広色域でCMYKの色を正確に再現）、なければ sRGB にフォールバック
+        output_profile_path = (
+            self._profile_manager._find_profile(ColorProfileManager.P3_PROFILE_PATHS)
+            or self._profile_manager._find_profile(ColorProfileManager.SRGB_PROFILE_PATHS)
+        )
+        cmyk_path = self._profile_manager._find_profile(ColorProfileManager.CMYK_PROFILE_PATHS)
+
+        cmd = [
+            "gs",
+            "-dBATCH", "-dNOPAUSE", "-dQUIET",
+            "-sDEVICE=png16m",
+            "-r300",
+            "-dFirstPage=1", "-dLastPage=1",
+            "-dUseCIEColor",
+        ]
+
+        # 出力プロファイルを指定（P3 または sRGB）
+        if output_profile_path:
+            cmd.append(f"-sOutputICCProfile={output_profile_path}")
+
+        # デフォルト CMYK プロファイルを指定（未タグ CMYK コンテンツ用）
+        if cmyk_path:
+            cmd.append(f"-sDefaultCMYKProfile={cmyk_path}")
+
+        cmd.append(f"-sOutputFile={output_path}")
+        cmd.append(input_path)
+
+        try:
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+            return result.returncode == 0 and Path(output_path).exists()
+        except (subprocess.SubprocessError, FileNotFoundError, OSError):
+            return False
+
+    def _render_psd_to_png(self, input_path: str, output_path: str) -> bool:
+        """ImageMagick CLI を使って PSD を sRGB PNG として出力する。
+
+        比較用リファレンス画像の生成に使用。JPEG 中間ファイルを経由せず
+        PNG（可逆）で直接出力することで色の劣化を防ぐ。
+        _render_psd_via_imagemagick と同じプロファイル保持ロジックを使用する。
+
+        Args:
+            input_path: PSD ファイルのパス
+            output_path: 出力 PNG のパス
+
+        Returns:
+            成功した場合 True
+        """
+        srgb_path = self._profile_manager._find_profile(ColorProfileManager.SRGB_PROFILE_PATHS)
+        if not srgb_path:
+            return False
+
+        source_profile = self._profile_manager.get_icc_profile(input_path)
+        has_embedded_profile = source_profile is not None and len(source_profile) > 4
+
+        cmd = [
+            "convert",
+            "-density", "300",
+            f"{input_path}[0]",
+        ]
+
+        if not has_embedded_profile:
+            cmyk_path = self._profile_manager._find_profile(ColorProfileManager.CMYK_PROFILE_PATHS)
+            if cmyk_path:
+                cmd += ["-profile", cmyk_path]
+
+        cmd += [
+            "-intent", "Perceptual",
+            "-black-point-compensation",
+            "-profile", srgb_path,
+            output_path,
+        ]
+
+        try:
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+            return result.returncode == 0 and Path(output_path).exists()
+        except (subprocess.SubprocessError, FileNotFoundError, OSError):
+            return False
+
     def _convert_to_jpeg(
         self,
         input_path: str,
@@ -136,14 +281,57 @@ class ConversionEngine:
     ) -> None:
         """ファイルをJPEGに変換する。
 
+        AI ファイルは Ghostscript を直接呼び出して ICC カラーマネジメント付きで
+        レンダリングし、その PNG を JPEG に変換します。
+        PSD など AI 以外のファイルは Wand による変換を行います。
+
         Args:
             input_path: 入力ファイルのパス
             output_path: 出力JPEGのパス
             options: 変換オプション
             source_profile: ICCプロファイル
         """
+        ext = Path(input_path).suffix.lower()
+
+        if ext == ".ai":
+            # Ghostscript で ICC 色管理付きレンダリング → PNG → JPEG
+            png_tmp = output_path + ".gs_tmp.png"
+            try:
+                if self._render_ai_via_ghostscript(input_path, png_tmp):
+                    with Image(filename=png_tmp) as img:
+                        # Ghostscript 出力 PNG（P3 または sRGB）を sRGB JPEG に変換
+                        img = self._profile_manager.convert_to_srgb(img)
+                        img.format = "jpeg"
+                        img.compression_quality = options.quality
+                        img.save(filename=output_path)
+                    return  # 成功時はここで終了（finally で png_tmp を削除）
+            finally:
+                if Path(png_tmp).exists():
+                    os.unlink(png_tmp)
+            # Ghostscript 失敗時はフォールバックとして Wand 変換を続行
+
+        if ext == ".psd":
+            # ImageMagick CLI で ICC 色管理付き変換
+            # Wand Python の profile 割り当ては CMYK 画像で正しく動作しないため CLI を使用
+            tmp_jpg = output_path + ".im_tmp.jpg"
+            try:
+                if self._render_psd_via_imagemagick(input_path, tmp_jpg):
+                    # 品質調整: CLI は品質 92 で出力済み → 必要なら Wand で再エンコード
+                    if options.quality != 92:
+                        with Image(filename=tmp_jpg) as img:
+                            img.format = "jpeg"
+                            img.compression_quality = options.quality
+                            img.save(filename=output_path)
+                    else:
+                        os.rename(tmp_jpg, output_path)
+                    return
+            finally:
+                if Path(tmp_jpg).exists():
+                    os.unlink(tmp_jpg)
+            # ImageMagick CLI 失敗時はフォールバック
+
+        # フォールバック: Wand による変換（RGB ファイルまたは CLI 失敗時）
         with Image(resolution=300) as img:
-            # AI/PDF ファイルは Ghostscript 経由で高解像度レンダリング
             img.read(filename=self._get_wand_filename(input_path))
 
             # 最初のフレームのみ使用（複数ページのPSD/AIの場合）
@@ -167,13 +355,27 @@ class ConversionEngine:
     ) -> None:
         """比較用のリファレンス画像をPNGとして出力する。
 
-        PNG形式で出力することで色空間変換なしの参照画像を作成します。
+        AI ファイルは Ghostscript で ICC 色管理付きレンダリングを行い、
+        正確な色を持つリファレンス画像を生成します。
 
         Args:
             input_path: 入力ファイルのパス
             reference_path: リファレンス画像の出力パス
             source_profile: ICCプロファイル
         """
+        ext = Path(input_path).suffix.lower()
+
+        if ext == ".ai":
+            if self._render_ai_via_ghostscript(input_path, reference_path):
+                return  # GS で直接 PNG として保存完了
+            # Ghostscript 失敗時はフォールバック
+
+        if ext == ".psd":
+            # ImageMagick CLI で sRGB PNG として直接出力（JPEG 中間ファイルなし）
+            if self._render_psd_to_png(input_path, reference_path):
+                return
+            # CLI 失敗時はフォールバック
+
         with Image(resolution=300) as img:
             img.read(filename=self._get_wand_filename(input_path))
 
@@ -190,8 +392,9 @@ class ConversionEngine:
     def _apply_color_correction(self, reference_path: str, target_path: str) -> None:
         """色差マップに基づいて色補正を適用する。
 
-        参照画像との平均色差を計算し、ガンマ補正とレベル調整で
+        参照画像との平均色差を計算し、Lab空間での平均シフトで
         色味を参照画像に近づけます。
+        補正後は Wand で sRGB ICC プロファイルを埋め込んで保存します。
 
         Args:
             reference_path: 参照画像のパス
@@ -230,7 +433,16 @@ class ConversionEngine:
         corrected_rgb = sk_color.lab2rgb(tgt_lab)
         corrected_uint8 = (corrected_rgb * 255).astype(np.uint8)
 
-        sk_io.imsave(target_path, corrected_uint8, quality=95)
+        # Wand で保存して sRGB ICC プロファイルを埋め込む
+        # sk_io.imsave はプロファイルを削除するため使用しない
+        srgb_path = self._profile_manager._find_profile(ColorProfileManager.SRGB_PROFILE_PATHS)
+        with Image.from_array(corrected_uint8) as img:
+            if srgb_path:
+                with open(srgb_path, "rb") as f:
+                    img.profiles["icc"] = f.read()
+            img.format = "jpeg"
+            img.compression_quality = 95
+            img.save(filename=target_path)
 
     def _adjust_to_target_size(
         self, input_path: str, output_path: str, target_size_kb: int
