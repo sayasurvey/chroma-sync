@@ -1,0 +1,49 @@
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/app
+      - upload_data:/app/uploads
+    environment:
+      - PYTHONPATH=/app
+      - UPLOAD_DIR=/app/uploads
+      - MAX_UPLOAD_SIZE_MB=100
+      - FILE_RETENTION_HOURS=24
+      - DEFAULT_QUALITY=85
+      - MAX_DELTA_E=2.0
+      - OLLAMA_URL=${OLLAMA_URL:-http://host.docker.internal:11434}
+    networks:
+      - chroma-network
+    develop:
+      watch:
+        - action: sync
+          path: ./backend/app
+          target: /app/app
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./frontend/src:/app/src
+      - ./frontend/public:/app/public
+    environment:
+      - VITE_API_URL=http://localhost:8000
+      - VITE_WS_URL=ws://localhost:8000
+    depends_on:
+      - backend
+    networks:
+      - chroma-network
+
+volumes:
+  upload_data:
+
+networks:
+  chroma-network:
+    driver: bridge

@@ -1,0 +1,53 @@
+[tool.poetry]
+name = "chroma-sync-backend"
+version = "0.1.0"
+description = "AI/PSD to JPEG converter with color fidelity"
+authors = ["chroma-sync"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.11"
+fastapi = "^0.111.0"
+uvicorn = {extras = ["standard"], version = "^0.29.0"}
+python-multipart = "^0.0.9"
+aiofiles = "^23.2.1"
+Wand = "^0.6.13"
+Pillow = "^10.3.0"
+numpy = "^1.26.4"
+scikit-image = "^0.23.2"
+httpx = "^0.27.0"
+pydantic-settings = "^2.2.1"
+watchfiles = "^0.21.0"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.2.0"
+pytest-asyncio = "^0.23.7"
+pytest-cov = "^5.0.0"
+ruff = "^0.4.4"
+mypy = "^1.10.0"
+black = "^24.4.2"
+httpx = "^0.27.0"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W"]
+
+[tool.black]
+line-length = 100
+target-version = ["py311"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = false
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
