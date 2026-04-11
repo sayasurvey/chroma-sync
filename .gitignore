@@ -1,0 +1,7 @@
+firebase-debug.log
+.mcp.json
+.spec-workflow/approvals
+.spec-workflow/archive
+.spec-workflow/steering
+.spec-workflow/templates
+.spec-workflow/user-templates
