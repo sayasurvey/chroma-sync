@@ -83,9 +83,9 @@ export default function App() {
               )}
 
               {/* 進捗バー */}
-              {isProcessing && progress && (
+              {isProcessing && (
                 <section className={styles.section}>
-                  <ProgressBar progress={progress} />
+                  <ProgressBar progress={progress} state={state} />
                 </section>
               )}
 

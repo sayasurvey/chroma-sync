@@ -7,6 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from app.api import convert, health
+from app.api.convert import ws_router
 from app.config import settings
 from app.services.file_manager import FileManager
 
@@ -47,11 +48,12 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://localhost:3000"],
-    allow_credentials=True,
+    allow_origins=["*"],  # WebSocket を含む Docker 内通信を許可
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 app.include_router(health.router, prefix="/api", tags=["health"])
 app.include_router(convert.router, prefix="/api", tags=["convert"])
+app.include_router(ws_router, tags=["websocket"])  # WebSocket は /ws/{job_id} にプレフィックスなし

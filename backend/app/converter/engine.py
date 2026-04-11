@@ -142,10 +142,16 @@ class ConversionEngine:
             options: 変換オプション
             source_profile: ICCプロファイル
         """
-        with Image(filename=input_path) as img:
-            # 最初のフレームのみ使用（複数ページのPSDの場合）
+        with Image(resolution=300) as img:
+            # AI/PDF ファイルは Ghostscript 経由で高解像度レンダリング
+            img.read(filename=self._get_wand_filename(input_path))
+
+            # 最初のフレームのみ使用（複数ページのPSD/AIの場合）
             if len(img.sequence) > 1:
-                img = Image(img.sequence[0])
+                with img.sequence[0] as frame:
+                    single = Image(image=frame)
+                img.close()
+                img = single
 
             # sRGBへのカラープロファイル変換
             img = self._profile_manager.convert_to_srgb(img, source_profile)
@@ -168,9 +174,14 @@ class ConversionEngine:
             reference_path: リファレンス画像の出力パス
             source_profile: ICCプロファイル
         """
-        with Image(filename=input_path) as img:
+        with Image(resolution=300) as img:
+            img.read(filename=self._get_wand_filename(input_path))
+
             if len(img.sequence) > 1:
-                img = Image(img.sequence[0])
+                with img.sequence[0] as frame:
+                    single = Image(image=frame)
+                img.close()
+                img = single
 
             img = self._profile_manager.convert_to_srgb(img, source_profile)
             img.format = "png"
@@ -260,6 +271,25 @@ class ConversionEngine:
 
             img.compression_quality = lo
             img.save(filename=output_path)
+
+    @staticmethod
+    def _get_wand_filename(input_path: str) -> str:
+        """AI/PSD ファイルを正しく読み込むための Wand ファイル名を返す。
+
+        AI ファイル（PDF ベース）は Ghostscript を通じて処理するため
+        pdf: プレフィックスを付け、最初のページのみを対象にします。
+
+        Args:
+            input_path: 入力ファイルのパス
+
+        Returns:
+            Wand で使用するファイル名
+        """
+        ext = Path(input_path).suffix.lower()
+        if ext == ".ai":
+            # AI ファイルは PDF ベースのため pdf: プレフィックスで最初のページを読む
+            return f"pdf:{input_path}[0]"
+        return input_path
 
     @staticmethod
     def _update_progress(

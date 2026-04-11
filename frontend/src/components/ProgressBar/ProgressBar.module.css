@@ -38,6 +38,17 @@
   transition: width 0.3s ease;
 }
 
+/* 進捗不明時のアニメーション */
+@keyframes indeterminate {
+  0% { transform: translateX(-100%); width: 40%; }
+  100% { transform: translateX(260%); width: 40%; }
+}
+
+.indeterminate {
+  width: 40% !important;
+  animation: indeterminate 1.4s ease-in-out infinite;
+}
+
 .deltaE {
   display: flex;
   align-items: center;

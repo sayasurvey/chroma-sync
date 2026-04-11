@@ -11,6 +11,7 @@ from app.services.file_manager import FileManager
 from app.services.job_queue import JobQueue
 
 router = APIRouter()
+ws_router = APIRouter()  # /api プレフィックスなしで登録する WebSocket 専用ルーター
 job_queue = JobQueue()
 file_manager = FileManager(settings.upload_dir)
 
@@ -20,6 +21,8 @@ ALLOWED_CONTENT_TYPES = {
     "application/illustrator",
     "image/vnd.adobe.photoshop",
     "application/octet-stream",  # 一部のシステムはこれで送る
+    "application/pdf",  # macOS は AI ファイルを PDF として送ることがある
+    "application/x-photoshop",
 }
 
 
@@ -161,7 +164,7 @@ async def get_preview(job_id: str) -> FileResponse:
     return FileResponse(job.output_file_path, media_type="image/jpeg")
 
 
-@router.websocket("/ws/{job_id}")
+@ws_router.websocket("/ws/{job_id}")
 async def websocket_progress(websocket: WebSocket, job_id: str) -> None:
     """WebSocketで変換進捗をリアルタイム通知する"""
     await websocket.accept()
