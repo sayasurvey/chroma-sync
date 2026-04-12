@@ -15,9 +15,6 @@ class ConversionOptions(BaseModel):
     max_delta_e: float = Field(default=2.0, gt=0)
     """許容する最大色差（ΔE）"""
 
-    use_llm: bool = False
-    """LLM色補正を使用するか（Ollamaが利用可能な場合のみ有効）"""
-
 
 class ConversionJob(BaseModel):
     """変換ジョブ"""

@@ -7,7 +7,6 @@ from wand.image import Image
 
 from app.converter.color_diff import ColorDiffCalculator
 from app.converter.color_profile import ColorProfileManager
-from app.converter.llm_advisor import LLMColorAdvisor
 from app.models.job import ConversionJob, ConversionOptions
 from app.models.result import ConversionResult, Region
 
@@ -27,7 +26,6 @@ class ConversionEngine:
     def __init__(self) -> None:
         self._profile_manager = ColorProfileManager()
         self._diff_calculator = ColorDiffCalculator()
-        self._llm_advisor = LLMColorAdvisor()
 
     def convert(
         self,
@@ -87,16 +85,6 @@ class ConversionEngine:
 
                 if delta_e <= options.max_delta_e:
                     break
-
-            # LLM補正を試みる
-            if delta_e > options.max_delta_e and options.use_llm:
-                self._update_progress(job, 90, "LLMによる高度な色補正を試みています...")
-                plan = self._llm_advisor.suggest_color_correction(
-                    reference_path, temp_output, regions
-                )
-                if plan:
-                    self._llm_advisor.apply_llm_correction(temp_output, plan)
-                    delta_e = self._diff_calculator.calculate_delta_e(reference_path, temp_output)
 
             # 補正後のΔEを更新
             for region in regions:

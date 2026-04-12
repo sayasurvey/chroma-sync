@@ -21,7 +21,6 @@ export async function startConversion(
   }
   formData.append('quality', String(options.quality))
   formData.append('max_delta_e', String(options.maxDeltaE))
-  formData.append('use_llm', String(options.useLlm))
 
   const response = await fetch(`${API_BASE}/convert`, {
     method: 'POST',

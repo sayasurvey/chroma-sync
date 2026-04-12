@@ -2,7 +2,6 @@ export interface ConversionOptions {
   targetSizeKb?: number
   quality: number
   maxDeltaE: number
-  useLlm: boolean
 }
 
 export type ConversionStatus = 'pending' | 'processing' | 'completed' | 'failed'

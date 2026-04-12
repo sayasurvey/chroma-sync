@@ -77,19 +77,6 @@ export const ConversionOptionsPanel: React.FC<Props> = ({ options, onChange, dis
         <p className={styles.hint}>ΔE &lt; 2.0 が人間の知覚限界の目安です</p>
       </div>
 
-      <div className={styles.group}>
-        <label className={styles.checkboxLabel}>
-          <input
-            type="checkbox"
-            checked={options.useLlm}
-            onChange={(e) => update({ useLlm: e.target.checked })}
-            disabled={disabled}
-            className={styles.checkbox}
-          />
-          <span>ローカルLLMによる高度な色補正を使用</span>
-        </label>
-        <p className={styles.hint}>Ollamaが起動している場合のみ有効。通常の色補正で改善しない場合に使用</p>
-      </div>
     </div>
   )
 }

@@ -15,7 +15,6 @@ services:
       - FILE_RETENTION_HOURS=24
       - DEFAULT_QUALITY=85
       - MAX_DELTA_E=2.0
-      - OLLAMA_URL=${OLLAMA_URL:-http://host.docker.internal:11434}
     networks:
       - chroma-network
     develop:

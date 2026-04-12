@@ -10,7 +10,6 @@ import styles from './App.module.css'
 const DEFAULT_OPTIONS: ConversionOptions = {
   quality: 85,
   maxDeltaE: 2.0,
-  useLlm: false,
 }
 
 export default function App() {

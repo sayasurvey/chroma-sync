@@ -44,7 +44,6 @@ async def start_conversion(
     target_size_kb: int | None = Form(None),
     quality: int = Form(settings.default_quality),
     max_delta_e: float = Form(settings.max_delta_e),
-    use_llm: bool = Form(False),
 ) -> dict[str, Any]:
     """ファイルをアップロードして変換ジョブを開始する"""
     _validate_file(file.filename or "")
@@ -65,7 +64,6 @@ async def start_conversion(
         target_size_kb=target_size_kb,
         quality=quality,
         max_delta_e=max_delta_e,
-        use_llm=use_llm,
     )
 
     # ジョブをキューに追加
