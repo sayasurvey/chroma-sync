@@ -24,8 +24,6 @@
 - **ImageMagick/Wand**: 画像変換の実績あるライブラリ（外部ライブラリ）
 - **scikit-image**: 色差（ΔE）計算用（外部ライブラリ）
 
-### Integration Points
-- **Firebase Firestore**: 変換ログの保存（Web版のみ）
 ## Architecture
 
 システム全体は以下のコンポーネントで構成されます：
@@ -43,7 +41,6 @@ graph TD
     Decision -->|Yes| Output[JPEG出力]
     Decision -->|No| AutoFix[自動色補正]
     AutoFix --> ColorDiff
-    API --> Firebase[Firebase Firestore Web版のみ]
     API --> WS[WebSocket 進捗通知]
     Frontend --> WS
 ```

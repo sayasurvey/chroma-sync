@@ -51,11 +51,9 @@
 
 ### Data Storage
 - **一時ファイル**: ローカルファイルシステム（変換処理中のみ保持）
-- **変換ログ**: SQLite（ローカル環境）/ Firebase Firestore（Web版）
 - **Data formats**: JSON（API通信）、JPEG/PNG（画像）
 
 ### External Integrations
-- **Firebase**: 認証・データストレージ（Web版のみ）
 - **Protocols**: HTTP/REST, WebSocket（進捗通知）
 
 ### Monitoring & Dashboard Technologies
@@ -88,8 +86,7 @@
 
 - **Target Platform(s)**: 
   - ローカル: Docker Desktop（Mac/Windows/Linux）
-  - Web: Firebase Hosting + Cloud Run
-- **Distribution Method**: Docker Compose（ローカル）、Firebase deploy（Web）
+- **Distribution Method**: Docker Compose（ローカル）
 - **Installation Requirements**: Docker Desktop、Node.js（開発時のみ）
 - **Update Mechanism**: docker pull / git pull + docker compose up
 
