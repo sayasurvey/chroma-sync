@@ -181,11 +181,14 @@ class ConversionEngine:
             return False
 
     def _render_ai_via_ghostscript(self, input_path: str, output_path: str) -> bool:
-        """Ghostscript を直接呼び出して AI ファイルを PNG にレンダリングする。
+        """Ghostscript を直接呼び出して AI ファイルを sRGB PNG にレンダリングする。
 
         ImageMagick 経由の Ghostscript 呼び出しでは ICC カラーマネジメントが
         正しく適用されないため、直接 Ghostscript を起動して -dUseCIEColor と
         ICC プロファイルを明示的に指定することで正確な色再現を行う。
+
+        P3 出力は廃止: GS が P3 PNG を出力した後 Wand で P3→sRGB 変換を行う
+        2段階変換が色ずれの原因となるため、GS で直接 sRGB に変換する。
 
         Args:
             input_path: AI ファイルのパス
@@ -194,11 +197,8 @@ class ConversionEngine:
         Returns:
             成功した場合 True
         """
-        # P3 優先（広色域でCMYKの色を正確に再現）、なければ sRGB にフォールバック
-        output_profile_path = (
-            self._profile_manager._find_profile(ColorProfileManager.P3_PROFILE_PATHS)
-            or self._profile_manager._find_profile(ColorProfileManager.SRGB_PROFILE_PATHS)
-        )
+        # sRGB のみ使用（P3→sRGB の2段階変換で色ずれが発生するため P3 は廃止）
+        output_profile_path = self._profile_manager._find_profile(ColorProfileManager.SRGB_PROFILE_PATHS)
         cmyk_path = self._profile_manager._find_profile(ColorProfileManager.CMYK_PROFILE_PATHS)
 
         cmd = [
@@ -210,7 +210,7 @@ class ConversionEngine:
             "-dUseCIEColor",
         ]
 
-        # 出力プロファイルを指定（P3 または sRGB）
+        # 出力プロファイルを指定（sRGB のみ）
         if output_profile_path:
             cmd.append(f"-sOutputICCProfile={output_profile_path}")
 
@@ -294,13 +294,13 @@ class ConversionEngine:
         ext = Path(input_path).suffix.lower()
 
         if ext == ".ai":
-            # Ghostscript で ICC 色管理付きレンダリング → PNG → JPEG
+            # Ghostscript で sRGB 直接レンダリング → PNG → JPEG
+            # GS が sRGB ICC プロファイルで出力するため追加の色変換は不要
             png_tmp = output_path + ".gs_tmp.png"
             try:
                 if self._render_ai_via_ghostscript(input_path, png_tmp):
                     with Image(filename=png_tmp) as img:
-                        # Ghostscript 出力 PNG（P3 または sRGB）を sRGB JPEG に変換
-                        img = self._profile_manager.convert_to_srgb(img)
+                        # Ghostscript が sRGB で直接出力済み → 2次変換は行わない
                         img.format = "jpeg"
                         img.compression_quality = options.quality
                         img.save(filename=output_path)
