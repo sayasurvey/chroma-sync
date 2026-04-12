@@ -181,14 +181,18 @@ class ConversionEngine:
             return False
 
     def _render_ai_via_ghostscript(self, input_path: str, output_path: str) -> bool:
-        """Ghostscript を直接呼び出して AI ファイルを sRGB PNG にレンダリングする。
+        """Ghostscript を直接呼び出して AI ファイルを P3/sRGB PNG にレンダリングする。
 
         ImageMagick 経由の Ghostscript 呼び出しでは ICC カラーマネジメントが
         正しく適用されないため、直接 Ghostscript を起動して -dUseCIEColor と
         ICC プロファイルを明示的に指定することで正確な色再現を行う。
 
-        P3 出力は廃止: GS が P3 PNG を出力した後 Wand で P3→sRGB 変換を行う
-        2段階変換が色ずれの原因となるため、GS で直接 sRGB に変換する。
+        P3 を優先する理由: macOS の P3 ディスプレイはすべての色を P3 色空間で
+        表示する。Digital Color Meter「ネイティブ」は P3 スクリーン値を返すため、
+        JPEG の生値が P3 値と一致していないと差異が生じる。GS が P3 PNG を出力
+        すると PNG に P3 ICC プロファイルが自動埋め込みされ、Wand の JPEG 保存時
+        にそのまま引き継がれる。sRGB 出力では sRGB→P3 変換でシアン系の R チャンネル
+        が 0→72 のようにズレるため使用しない。
 
         Args:
             input_path: AI ファイルのパス
@@ -197,8 +201,16 @@ class ConversionEngine:
         Returns:
             成功した場合 True
         """
-        # sRGB のみ使用（P3→sRGB の2段階変換で色ずれが発生するため P3 は廃止）
-        output_profile_path = self._profile_manager._find_profile(ColorProfileManager.SRGB_PROFILE_PATHS)
+        # P3 優先、なければ sRGB にフォールバック
+        # P3 PNG には GS が P3 ICC プロファイル（536bytes）を自動埋め込みするため、
+        # Wand で JPEG 保存時にプロファイルが引き継がれる。
+        # macOS が P3 ディスプレイに表示する際は P3 値をそのまま使用するため
+        # DCM ネイティブ値が原稿の P3 スクリーン値と一致する。
+        # sRGB 出力では sRGB→P3 変換で R:0 が R:72 等にズレるため使用しない。
+        output_profile_path = (
+            self._profile_manager._find_profile(ColorProfileManager.P3_PROFILE_PATHS)
+            or self._profile_manager._find_profile(ColorProfileManager.SRGB_PROFILE_PATHS)
+        )
         cmyk_path = self._profile_manager._find_profile(ColorProfileManager.CMYK_PROFILE_PATHS)
 
         cmd = [
@@ -210,7 +222,7 @@ class ConversionEngine:
             "-dUseCIEColor",
         ]
 
-        # 出力プロファイルを指定（sRGB のみ）
+        # 出力プロファイルを指定（P3 または sRGB）
         if output_profile_path:
             cmd.append(f"-sOutputICCProfile={output_profile_path}")
 
