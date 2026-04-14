@@ -28,6 +28,9 @@ class ConversionJob(BaseModel):
     input_file_path: str
     """アップロードされたファイルのパス"""
 
+    original_filename: str = ""
+    """アップロード時の元ファイル名（ダウンロード時に使用）"""
+
     output_file_path: str | None = None
     """変換後のJPEGファイルパス"""
 

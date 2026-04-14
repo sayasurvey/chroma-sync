@@ -21,12 +21,15 @@ class JobQueue:
         self._engine = ConversionEngine()
         self._file_manager = FileManager(settings.upload_dir)
 
-    async def enqueue(self, input_path: str, options: ConversionOptions) -> ConversionJob:
+    async def enqueue(
+        self, input_path: str, options: ConversionOptions, original_filename: str = ""
+    ) -> ConversionJob:
         """変換ジョブをキューに追加し、非同期で処理を開始する。
 
         Args:
             input_path: 入力ファイルのパス
             options: 変換オプション
+            original_filename: アップロード時の元ファイル名
 
         Returns:
             作成されたジョブ
@@ -35,6 +38,7 @@ class JobQueue:
         job = ConversionJob(
             job_id=job_id,
             input_file_path=input_path,
+            original_filename=original_filename,
             options=options,
         )
         self._jobs[job_id] = job
@@ -81,13 +85,15 @@ class JobQueue:
             )
             job.progress_message = "変換失敗"
             job.completed_at = datetime.utcnow()
+            self._file_manager.delete_file(job.input_file_path)
 
-        except Exception as e:
+        except Exception:
             logger.exception("ジョブ %s の変換中にエラーが発生しました", job.job_id)
             job.status = "failed"
             job.error = "変換中にエラーが発生しました。しばらく経ってから再度お試しください。"
             job.progress_message = "変換失敗"
             job.completed_at = datetime.utcnow()
+            self._file_manager.delete_file(job.input_file_path)
 
     def get_job(self, job_id: str) -> ConversionJob | None:
         """ジョブを取得する。

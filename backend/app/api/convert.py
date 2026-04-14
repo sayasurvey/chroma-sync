@@ -1,5 +1,7 @@
 import asyncio
 import json
+import os
+from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
@@ -16,20 +18,10 @@ job_queue = JobQueue()
 file_manager = FileManager(settings.upload_dir)
 
 ALLOWED_EXTENSIONS = {".ai", ".psd"}
-ALLOWED_CONTENT_TYPES = {
-    "application/postscript",
-    "application/illustrator",
-    "image/vnd.adobe.photoshop",
-    "application/octet-stream",  # 一部のシステムはこれで送る
-    "application/pdf",  # macOS は AI ファイルを PDF として送ることがある
-    "application/x-photoshop",
-}
 
 
 def _validate_file(filename: str) -> None:
     """ファイル名の拡張子を検証する"""
-    from pathlib import Path
-
     ext = Path(filename).suffix.lower()
     if ext not in ALLOWED_EXTENSIONS:
         raise HTTPException(
@@ -67,7 +59,8 @@ async def start_conversion(
     )
 
     # ジョブをキューに追加
-    job = await job_queue.enqueue(input_path, options)
+    original_filename = file.filename or "upload"
+    job = await job_queue.enqueue(input_path, options, original_filename)
 
     return {"job_id": job.job_id, "status": job.status}
 
@@ -129,18 +122,14 @@ async def download_result(job_id: str) -> FileResponse:
     if job.status != "completed" or not job.output_file_path:
         raise HTTPException(status_code=400, detail="変換がまだ完了していません")
 
-    import os
-
     if not os.path.exists(job.output_file_path):
         raise HTTPException(status_code=404, detail="変換ファイルが見つかりません")
 
-    from pathlib import Path
-
-    filename = Path(job.input_file_path).stem + ".jpg"
+    download_name = Path(job.original_filename).stem + ".jpg"
     return FileResponse(
         job.output_file_path,
         media_type="image/jpeg",
-        filename=filename,
+        filename=download_name,
     )
 
 
@@ -153,8 +142,6 @@ async def get_preview(job_id: str) -> FileResponse:
 
     if job.status != "completed" or not job.output_file_path:
         raise HTTPException(status_code=400, detail="変換がまだ完了していません")
-
-    import os
 
     if not os.path.exists(job.output_file_path):
         raise HTTPException(status_code=404, detail="変換ファイルが見つかりません")
