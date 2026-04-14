@@ -24,10 +24,6 @@
 - **ImageMagick/Wand**: 画像変換の実績あるライブラリ（外部ライブラリ）
 - **scikit-image**: 色差（ΔE）計算用（外部ライブラリ）
 
-### Integration Points
-- **Firebase Firestore**: 変換ログの保存（Web版のみ）
-- **Ollama API**: 高度な色補正が必要な場合のLLM統合（オプション）
-
 ## Architecture
 
 システム全体は以下のコンポーネントで構成されます：
@@ -45,8 +41,6 @@ graph TD
     Decision -->|Yes| Output[JPEG出力]
     Decision -->|No| AutoFix[自動色補正]
     AutoFix --> ColorDiff
-    AutoFix --> LLM[Ollama LLM オプション]
-    API --> Firebase[Firebase Firestore Web版のみ]
     API --> WS[WebSocket 進捗通知]
     Frontend --> WS
 ```
@@ -93,14 +87,6 @@ graph TD
 - **Dependencies:** FastAPI, ConversionEngine
 - **Reuses:** ConversionEngine, ColorDiffCalculator
 
-### LLMColorAdvisor（LLM色補正アドバイザー）（オプション）
-- **Purpose:** 通常の色差修正では対応できない難しい色補正をLLMが支援する
-- **Interfaces:**
-  - `suggest_color_correction(original_image, converted_image, diff_regions) -> CorrectionPlan`
-  - `apply_llm_correction(image, plan) -> Image`
-- **Dependencies:** Ollama API（ローカルLLM）
-- **Reuses:** ColorDiffCalculator の結果を入力として使用
-
 ## Data Models
 
 ### ConversionJob
@@ -124,7 +110,6 @@ class ConversionOptions:
     target_size_kb: int | None   # 目標ファイルサイズ（KB）
     quality: int = 85            # JPEG品質 (1-100)
     max_delta_e: float = 2.0     # 許容する最大色差
-    use_llm: bool = False        # LLM色補正を使用するか
 ```
 
 ### ConversionResult
@@ -155,10 +140,6 @@ class ConversionResult:
 3. **色差が閾値を超え、自動修正でも改善不可能**
    - **Handling:** 最大修正試行回数（3回）を超えた場合は警告付きで変換結果を返す
    - **User Impact:** 「色補正の精度が目標値に達しませんでした（ΔE: X.X）」と色差マップを表示
-
-4. **LLMサービス（Ollama）が利用不可**
-   - **Handling:** Ollama APIへの接続失敗時はLLM補正をスキップし、通常の結果を返す
-   - **User Impact:** 「高度な色補正はスキップされました（Ollamaが利用できません）」を表示
 
 ## Testing Strategy
 

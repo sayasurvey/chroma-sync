@@ -23,8 +23,7 @@ chroma-sync/
 │   │   │   ├── __init__.py
 │   │   │   ├── engine.py     # ConversionEngine メインクラス
 │   │   │   ├── color_profile.py  # ColorProfileManager
-│   │   │   ├── color_diff.py     # ColorDiffCalculator
-│   │   │   └── llm_advisor.py    # LLMColorAdvisor（オプション）
+│   │   │   └── color_diff.py     # ColorDiffCalculator
 │   │   ├── models/           # Pydantic データモデル
 │   │   │   ├── __init__.py
 │   │   │   ├── job.py        # ConversionJob, ConversionOptions

@@ -5,3 +5,29 @@ firebase-debug.log
 .spec-workflow/steering
 .spec-workflow/templates
 .spec-workflow/user-templates
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+*.egg-info/
+dist/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Node.js
+node_modules/
+dist/
+.vite/
+
+# Docker
+.env
+
+# アップロードファイル（一時）
+backend/uploads/
+
+# OS
+.DS_Store
+Thumbs.db

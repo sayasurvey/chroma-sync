@@ -30,11 +30,6 @@
 - **python-multipart**: マルチパートファイルアップロード処理
 - **aiofiles**: 非同期ファイルI/O
 
-#### オプション（ローカルLLM）
-- **Ollama**: ローカルLLM実行環境
-- **llama-index** または **langchain**: LLMとの統合レイヤー
-- 使用モデル候補: LLaVA（画像理解対応LLM）
-
 ### Application Architecture
 
 クライアント・サーバーアーキテクチャ：
@@ -51,17 +46,14 @@
 [Conversion Engine]
   ├── ImageMagick/Wand (変換)
   ├── lcms2 (カラープロファイル)
-  ├── scikit-image (色差計算)
-  └── Ollama LLM (オプション: 高度な色補正)
+  └── scikit-image (色差計算)
 ```
 
 ### Data Storage
 - **一時ファイル**: ローカルファイルシステム（変換処理中のみ保持）
-- **変換ログ**: SQLite（ローカル環境）/ Firebase Firestore（Web版）
 - **Data formats**: JSON（API通信）、JPEG/PNG（画像）
 
 ### External Integrations
-- **Firebase**: 認証・データストレージ（Web版のみ）
 - **Protocols**: HTTP/REST, WebSocket（進捗通知）
 
 ### Monitoring & Dashboard Technologies
@@ -94,8 +86,7 @@
 
 - **Target Platform(s)**: 
   - ローカル: Docker Desktop（Mac/Windows/Linux）
-  - Web: Firebase Hosting + Cloud Run
-- **Distribution Method**: Docker Compose（ローカル）、Firebase deploy（Web）
+- **Distribution Method**: Docker Compose（ローカル）
 - **Installation Requirements**: Docker Desktop、Node.js（開発時のみ）
 - **Update Mechanism**: docker pull / git pull + docker compose up
 
@@ -134,12 +125,7 @@
    - 非同期処理に対応しており、ファイル変換中も他のリクエストを受け付けられる
    - WebSocketのサポートが標準で備わっており、変換進捗の通知に活用できる
 
-3. **ローカルLLM（Ollama）のオプション採用**:
-   - 通常の色差修正で対応できない難しいケースに対するフォールバックとして使用
-   - データプライバシーの観点からローカルLLMを採用
-   - LLaVAは画像を理解できるため、色補正の方向性をアドバイスできる
-
-4. **Docker Composeでの環境構築**:
+3. **Docker Composeでの環境構築**:
    - ImageMagickなどのシステム依存関係をDockerでカプセル化
    - 開発環境の統一化
 
@@ -147,4 +133,3 @@
 
 - **大容量ファイル**: 100MBを超えるファイルは変換に時間がかかる可能性がある
 - **ai形式の制限**: 一部の高度なIllustrator機能（3Dエフェクト等）は変換後に外観が変わる場合がある
-- **LLMオプション**: Ollamaモデルのダウンロードに時間とディスク容量が必要（LLaVA: 約4GB）

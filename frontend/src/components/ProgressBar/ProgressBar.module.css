@@ -1,0 +1,92 @@
+.container {
+  padding: 20px;
+  background: white;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.message {
+  font-size: 14px;
+  color: #374151;
+}
+
+.percent {
+  font-size: 14px;
+  font-weight: 600;
+  color: #6366f1;
+}
+
+.track {
+  width: 100%;
+  height: 8px;
+  background-color: #e5e7eb;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.fill {
+  height: 100%;
+  background: linear-gradient(90deg, #6366f1, #8b5cf6);
+  border-radius: 4px;
+  transition: width 0.3s ease;
+}
+
+/* 進捗不明時のアニメーション */
+@keyframes indeterminate {
+  0% { transform: translateX(-100%); width: 40%; }
+  100% { transform: translateX(260%); width: 40%; }
+}
+
+.indeterminate {
+  width: 40% !important;
+  animation: indeterminate 1.4s ease-in-out infinite;
+}
+
+.deltaE {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  font-size: 13px;
+}
+
+.deltaELabel {
+  color: #6b7280;
+}
+
+.deltaEValue {
+  font-weight: 600;
+  font-size: 15px;
+}
+
+.good {
+  color: #10b981;
+}
+
+.warning {
+  color: #f59e0b;
+}
+
+.badge {
+  padding: 2px 8px;
+  border-radius: 9999px;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.badgeGood {
+  background-color: #d1fae5;
+  color: #065f46;
+}
+
+.badgeWarning {
+  background-color: #fef3c7;
+  color: #92400e;
+}

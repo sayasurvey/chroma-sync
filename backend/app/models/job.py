@@ -1,0 +1,60 @@
+from datetime import datetime
+from typing import Literal
+
+from pydantic import BaseModel, Field
+
+
+class ConversionOptions(BaseModel):
+    """変換オプション"""
+
+    target_size_kb: int | None = Field(default=None, ge=1)
+    """目標ファイルサイズ（KB）。指定した場合は品質より優先される"""
+
+    quality: int = Field(default=85, ge=1, le=100)
+    """JPEG品質 (1-100)"""
+
+    max_delta_e: float = Field(default=2.0, gt=0)
+    """許容する最大色差（ΔE）"""
+
+
+class ConversionJob(BaseModel):
+    """変換ジョブ"""
+
+    job_id: str
+    """ジョブの一意識別子（UUID）"""
+
+    status: Literal["pending", "processing", "completed", "failed"] = "pending"
+    """ジョブの状態"""
+
+    input_file_path: str
+    """アップロードされたファイルのパス"""
+
+    original_filename: str = ""
+    """アップロード時の元ファイル名（ダウンロード時に使用）"""
+
+    output_file_path: str | None = None
+    """変換後のJPEGファイルパス"""
+
+    options: ConversionOptions
+    """変換オプション"""
+
+    delta_e: float | None = None
+    """最終的な色差値（ΔE）"""
+
+    corrections_applied: bool = False
+    """自動色補正が適用されたか"""
+
+    progress: int = 0
+    """進捗率 (0-100)"""
+
+    progress_message: str = "待機中..."
+    """進捗メッセージ"""
+
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    """ジョブ作成時刻"""
+
+    completed_at: datetime | None = None
+    """ジョブ完了時刻"""
+
+    error: str | None = None
+    """エラーメッセージ（失敗時）"""
