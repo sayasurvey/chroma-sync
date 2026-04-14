@@ -13,7 +13,13 @@ logger = logging.getLogger(__name__)
 
 
 class JobQueue:
-    """変換ジョブキュー管理クラス"""
+    """変換ジョブキュー管理クラス。
+
+    Note:
+        インメモリのジョブ管理のため、単一プロセス構成（シングルワーカー）のみ対応。
+        uvicorn --workers 2 等のマルチプロセス構成では各プロセスで独立したキューを
+        持つことになり、異なるプロセス間でジョブを参照できなくなる。
+    """
 
     def __init__(self) -> None:
         self._jobs: dict[str, ConversionJob] = {}
@@ -59,6 +65,7 @@ class JobQueue:
         job.progress_message = "変換処理を開始しています..."
 
         output_path = self._file_manager.get_output_path(job.input_file_path, job.job_id)
+        job.output_file_path = output_path
 
         try:
             result = await asyncio.to_thread(
@@ -70,7 +77,7 @@ class JobQueue:
             )
 
             self._results[job.job_id] = result
-            job.output_file_path = result.output_path
+            job.output_file_path = result.output_path  # engine が返す実際のパスで上書き
             job.delta_e = result.delta_e
             job.corrections_applied = result.corrections_applied
             job.status = "completed"
@@ -86,6 +93,7 @@ class JobQueue:
             job.progress_message = "変換失敗"
             job.completed_at = datetime.utcnow()
             self._file_manager.delete_file(job.input_file_path)
+            self._file_manager.delete_file(output_path)
 
         except Exception:
             logger.exception("ジョブ %s の変換中にエラーが発生しました", job.job_id)
@@ -94,6 +102,7 @@ class JobQueue:
             job.progress_message = "変換失敗"
             job.completed_at = datetime.utcnow()
             self._file_manager.delete_file(job.input_file_path)
+            self._file_manager.delete_file(output_path)
 
     def get_job(self, job_id: str) -> ConversionJob | None:
         """ジョブを取得する。

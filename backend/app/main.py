@@ -48,7 +48,7 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # WebSocket を含む Docker 内通信を許可
+    allow_origins=settings.cors_origins,  # CORS_ORIGINS 環境変数で制限可（デフォルト: ["*"]）
     allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],

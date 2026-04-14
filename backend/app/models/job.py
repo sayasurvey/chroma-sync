@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
@@ -22,8 +23,8 @@ class ConversionJob(BaseModel):
     job_id: str
     """ジョブの一意識別子（UUID）"""
 
-    status: str = "pending"
-    """ジョブの状態: "pending" | "processing" | "completed" | "failed" """
+    status: Literal["pending", "processing", "completed", "failed"] = "pending"
+    """ジョブの状態"""
 
     input_file_path: str
     """アップロードされたファイルのパス"""

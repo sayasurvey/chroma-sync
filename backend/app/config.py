@@ -7,6 +7,7 @@ class Settings(BaseSettings):
     file_retention_hours: int = 24
     default_quality: int = 85
     max_delta_e: float = 2.0
+    cors_origins: list[str] = ["*"]
 
     class Config:
         env_file = ".env"

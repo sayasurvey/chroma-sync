@@ -1,8 +1,13 @@
+import io
 import os
+import shutil
 import subprocess
 from pathlib import Path
 
 import numpy as np
+import skimage.io as sk_io
+from skimage import color as sk_color
+from skimage.transform import resize
 from wand.image import Image
 
 from app.converter.color_diff import ColorDiffCalculator
@@ -14,6 +19,9 @@ from app.models.result import ConversionResult, Region
 DEFAULT_QUALITY = 85
 MAX_DELTA_E = 2.0
 MAX_CORRECTION_ATTEMPTS = 3
+
+# ImageMagick の convert コマンドパスを解決する（曖昧なコマンド名を避けるため）
+_IMAGEMAGICK_CMD = shutil.which("convert") or "convert"
 
 
 class ConversionEngine:
@@ -146,7 +154,7 @@ class ConversionEngine:
         has_embedded_profile = source_profile is not None and len(source_profile) > 4
 
         cmd = [
-            "convert",
+            _IMAGEMAGICK_CMD,
             "-density", "300",
             f"{input_path}[0]",
         ]
@@ -255,7 +263,7 @@ class ConversionEngine:
         has_embedded_profile = source_profile is not None and len(source_profile) > 4
 
         cmd = [
-            "convert",
+            _IMAGEMAGICK_CMD,
             "-density", "300",
             f"{input_path}[0]",
         ]
@@ -406,10 +414,6 @@ class ConversionEngine:
             reference_path: 参照画像のパス
             target_path: 補正対象のJPEGパス（インプレースで修正）
         """
-        import skimage.io as sk_io
-        from skimage import color as sk_color
-        from skimage.transform import resize
-
         ref_img = sk_io.imread(reference_path).astype(float) / 255.0
         tgt_img = sk_io.imread(target_path).astype(float) / 255.0
 
@@ -472,8 +476,6 @@ class ConversionEngine:
             for _ in range(8):
                 mid = (lo + hi) // 2
                 img.compression_quality = mid
-
-                import io
 
                 buffer = io.BytesIO()
                 img.save(file=buffer)
