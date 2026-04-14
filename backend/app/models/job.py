@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field
 class ConversionOptions(BaseModel):
     """変換オプション"""
 
-    target_size_kb: int | None = None
+    target_size_kb: int | None = Field(default=None, ge=1)
     """目標ファイルサイズ（KB）。指定した場合は品質より優先される"""
 
     quality: int = Field(default=85, ge=1, le=100)

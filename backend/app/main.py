@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from app.api import convert, health
-from app.api.convert import ws_router
+from app.api.convert import job_queue, ws_router
 from app.config import settings
 from app.services.file_manager import FileManager
 
@@ -33,10 +33,11 @@ async def lifespan(app: FastAPI):
 
 
 async def _periodic_cleanup(file_manager: FileManager) -> None:
-    """24時間ごとに期限切れファイルを削除する"""
+    """1時間ごとに期限切れファイルとジョブをメモリから削除する"""
     while True:
         await asyncio.sleep(3600)  # 1時間ごとにチェック
         await file_manager.cleanup_expired_files(settings.file_retention_hours)
+        job_queue.cleanup_expired_jobs(settings.file_retention_hours)
 
 
 app = FastAPI(

@@ -55,53 +55,59 @@ class ConversionEngine:
 
         # 変換とsRGB変換
         temp_output = output_path + ".tmp.jpg"
-        self._convert_to_jpeg(input_path, temp_output, options, source_profile)
-
-        self._update_progress(job, 50, "色差を計算中...")
-
-        # 色差計算（元ファイルをPNGで比較用に出力）
         reference_path = output_path + ".ref.png"
-        self._export_reference(input_path, reference_path, source_profile)
 
-        delta_e = self._diff_calculator.calculate_delta_e(reference_path, temp_output)
+        try:
+            self._convert_to_jpeg(input_path, temp_output, options, source_profile)
 
-        corrections_applied = False
-        correction_regions: list[Region] = []
+            self._update_progress(job, 50, "色差を計算中...")
 
-        if delta_e > options.max_delta_e:
-            self._update_progress(job, 60, f"色ずれを検出 (ΔE={delta_e:.2f})。自動修正中...")
-            regions = self._diff_calculator.get_diff_regions(
-                reference_path, temp_output, options.max_delta_e
-            )
+            # 色差計算（元ファイルをPNGで比較用に出力）
+            self._export_reference(input_path, reference_path, source_profile)
 
-            for attempt in range(MAX_CORRECTION_ATTEMPTS):
-                self._update_progress(
-                    job, 60 + attempt * 10, f"色補正試行 {attempt + 1}/{MAX_CORRECTION_ATTEMPTS}..."
+            delta_e = self._diff_calculator.calculate_delta_e(reference_path, temp_output)
+
+            corrections_applied = False
+            correction_regions: list[Region] = []
+
+            if delta_e > options.max_delta_e:
+                self._update_progress(job, 60, f"色ずれを検出 (ΔE={delta_e:.2f})。自動修正中...")
+                regions = self._diff_calculator.get_diff_regions(
+                    reference_path, temp_output, options.max_delta_e
                 )
 
-                self._apply_color_correction(reference_path, temp_output)
-                delta_e = self._diff_calculator.calculate_delta_e(reference_path, temp_output)
-                corrections_applied = True
+                for attempt in range(MAX_CORRECTION_ATTEMPTS):
+                    self._update_progress(
+                        job, 60 + attempt * 10, f"色補正試行 {attempt + 1}/{MAX_CORRECTION_ATTEMPTS}..."
+                    )
 
-                if delta_e <= options.max_delta_e:
-                    break
+                    self._apply_color_correction(reference_path, temp_output)
+                    delta_e = self._diff_calculator.calculate_delta_e(reference_path, temp_output)
+                    corrections_applied = True
 
-            # 補正後のΔEを更新
-            for region in regions:
-                region.delta_e_after = delta_e
-            correction_regions = regions
+                    if delta_e <= options.max_delta_e:
+                        break
 
-        # 目標サイズに合わせる
-        if options.target_size_kb:
-            self._update_progress(job, 92, "ファイルサイズを調整中...")
-            self._adjust_to_target_size(temp_output, output_path, options.target_size_kb)
-        else:
-            os.rename(temp_output, output_path)
+                # 補正後のΔEを更新
+                for region in regions:
+                    region.delta_e_after = delta_e
+                correction_regions = regions
 
-        # 一時ファイルの削除
-        for tmp in [reference_path, temp_output]:
-            if os.path.exists(tmp):
-                os.unlink(tmp)
+            # 目標サイズに合わせる
+            if options.target_size_kb:
+                self._update_progress(job, 92, "ファイルサイズを調整中...")
+                self._adjust_to_target_size(temp_output, output_path, options.target_size_kb)
+            else:
+                os.rename(temp_output, output_path)
+
+        finally:
+            # エラー時も含めて一時ファイルを確実に削除する
+            for tmp in [reference_path, temp_output]:
+                if os.path.exists(tmp):
+                    try:
+                        os.unlink(tmp)
+                    except OSError:
+                        pass
 
         output_size = os.path.getsize(output_path)
 

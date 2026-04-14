@@ -8,13 +8,11 @@ services:
     volumes:
       - ./backend:/app
       - upload_data:/app/uploads
+    env_file:
+      - .env
     environment:
       - PYTHONPATH=/app
-      - UPLOAD_DIR=/app/uploads
-      - MAX_UPLOAD_SIZE_MB=100
-      - FILE_RETENTION_HOURS=24
-      - DEFAULT_QUALITY=85
-      - MAX_DELTA_E=2.0
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
     networks:
       - chroma-network
     develop:
@@ -32,9 +30,8 @@ services:
     volumes:
       - ./frontend/src:/app/src
       - ./frontend/public:/app/public
-    environment:
-      - VITE_API_URL=http://backend:8000
-      - VITE_WS_URL=ws://backend:8000
+    env_file:
+      - .env
     depends_on:
       - backend
     networks:

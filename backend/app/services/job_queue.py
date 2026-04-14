@@ -1,12 +1,15 @@
 import asyncio
+import logging
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from app.config import settings
 from app.converter.engine import ConversionEngine
 from app.models.job import ConversionJob, ConversionOptions
 from app.models.result import ConversionResult
 from app.services.file_manager import FileManager
+
+logger = logging.getLogger(__name__)
 
 
 class JobQueue:
@@ -80,8 +83,9 @@ class JobQueue:
             job.completed_at = datetime.utcnow()
 
         except Exception as e:
+            logger.exception("ジョブ %s の変換中にエラーが発生しました", job.job_id)
             job.status = "failed"
-            job.error = f"変換中にエラーが発生しました: {str(e)}"
+            job.error = "変換中にエラーが発生しました。しばらく経ってから再度お試しください。"
             job.progress_message = "変換失敗"
             job.completed_at = datetime.utcnow()
 
@@ -106,3 +110,29 @@ class JobQueue:
             変換結果（存在しない場合はNone）
         """
         return self._results.get(job_id)
+
+    def cleanup_expired_jobs(self, retention_hours: int) -> int:
+        """指定時間を超えた完了済みジョブをメモリから削除する。
+
+        Args:
+            retention_hours: ジョブ保持時間（時間）
+
+        Returns:
+            削除されたジョブの数
+        """
+        threshold = datetime.utcnow() - timedelta(hours=retention_hours)
+        expired = [
+            job_id
+            for job_id, job in self._jobs.items()
+            if job.status in ("completed", "failed")
+            and job.completed_at is not None
+            and job.completed_at < threshold
+        ]
+        for job_id in expired:
+            self._jobs.pop(job_id, None)
+            self._results.pop(job_id, None)
+
+        if expired:
+            logger.info("%d 件の期限切れジョブをメモリから削除しました", len(expired))
+
+        return len(expired)
