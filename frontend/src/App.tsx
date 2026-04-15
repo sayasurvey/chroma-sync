@@ -4,7 +4,7 @@ import { FileUpload } from '@/components/FileUpload'
 import { ProgressBar } from '@/components/ProgressBar'
 import { useMultiConversion } from '@/hooks/useMultiConversion'
 import type { ConversionOptions, FileConversionItem } from '@/types/conversion'
-import { getDownloadUrl } from '@/api/client'
+import { getBatchDownloadUrl, getDownloadUrl, getPreviewUrl } from '@/api/client'
 import styles from './App.module.css'
 
 const DEFAULT_OPTIONS: ConversionOptions = {
@@ -63,30 +63,39 @@ function ConversionItemCard({ item }: { item: FileConversionItem }) {
 
       {item.state === 'completed' && item.result && item.jobId && (
         <div className={styles.conversionItemBody}>
-          <div className={styles.resultStats}>
-            <span className={styles.resultStat}>
-              {formatBytes(item.result.originalSizeBytes)}
-              <span className={styles.arrow}> → </span>
-              {formatBytes(item.result.outputSizeBytes)}
-            </span>
-            <span className={styles.resultStat}>
-              {((1 - item.result.outputSizeBytes / item.result.originalSizeBytes) * 100).toFixed(1)}%削減
-            </span>
-            <span className={`${styles.resultStat} ${item.result.deltaE < 2.0 ? styles.deltaGood : styles.deltaWarn}`}>
-              ΔE: {item.result.deltaE.toFixed(2)}
-              {item.result.deltaE < 2.0 ? ' ✓' : ' △'}
-            </span>
-            {item.result.correctionsApplied && (
-              <span className={styles.correctionBadge}>自動色補正済み</span>
-            )}
+          <div className={styles.previewRow}>
+            <img
+              src={getPreviewUrl(item.jobId)}
+              alt="変換結果プレビュー"
+              className={styles.previewThumb}
+            />
+            <div className={styles.previewInfo}>
+              <div className={styles.resultStats}>
+                <span className={styles.resultStat}>
+                  {formatBytes(item.result.originalSizeBytes)}
+                  <span className={styles.arrow}> → </span>
+                  {formatBytes(item.result.outputSizeBytes)}
+                </span>
+                <span className={styles.resultStat}>
+                  {((1 - item.result.outputSizeBytes / item.result.originalSizeBytes) * 100).toFixed(1)}%削減
+                </span>
+                <span className={`${styles.resultStat} ${item.result.deltaE < 2.0 ? styles.deltaGood : styles.deltaWarn}`}>
+                  ΔE: {item.result.deltaE.toFixed(2)}
+                  {item.result.deltaE < 2.0 ? ' ✓' : ' △'}
+                </span>
+                {item.result.correctionsApplied && (
+                  <span className={styles.correctionBadge}>自動色補正済み</span>
+                )}
+              </div>
+              <a
+                href={getDownloadUrl(item.jobId)}
+                download={item.file.name.replace(/\.(ai|psd)$/i, '.jpg')}
+                className={styles.downloadLink}
+              >
+                JPEGをダウンロード
+              </a>
+            </div>
           </div>
-          <a
-            href={getDownloadUrl(item.jobId)}
-            download={item.file.name.replace(/\.(ai|psd)$/i, '.jpg')}
-            className={styles.downloadLink}
-          >
-            JPEGをダウンロード
-          </a>
         </div>
       )}
 
@@ -129,8 +138,13 @@ export default function App() {
     setSelectedFiles([])
   }
 
-  const completedCount = items.filter(i => i.state === 'completed').length
+  const completedItems = items.filter(i => i.state === 'completed' && i.jobId)
+  const completedCount = completedItems.length
   const failedCount = items.filter(i => i.state === 'failed').length
+  const batchDownloadUrl =
+    completedItems.length > 1
+      ? getBatchDownloadUrl(completedItems.map(i => i.jobId!))
+      : null
 
   return (
     <div className={styles.app}>
@@ -221,9 +235,20 @@ export default function App() {
                 )}
               </div>
               {allDone && (
-                <button onClick={handleReset} className={styles.retryButton}>
-                  別のファイルを変換
-                </button>
+                <div className={styles.phaseActions}>
+                  {batchDownloadUrl && (
+                    <a
+                      href={batchDownloadUrl}
+                      download="chroma-sync-results.zip"
+                      className={styles.batchDownloadButton}
+                    >
+                      一括ダウンロード（ZIP）
+                    </a>
+                  )}
+                  <button onClick={handleReset} className={styles.retryButton}>
+                    別のファイルを変換
+                  </button>
+                </div>
               )}
             </div>
 

@@ -405,6 +405,56 @@
   margin: 0;
 }
 
+/* ---- プレビューサムネイル ---- */
+.previewRow {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+}
+
+.previewThumb {
+  width: 100px;
+  height: 100px;
+  object-fit: cover;
+  border-radius: 6px;
+  border: 1px solid #e5e7eb;
+  flex-shrink: 0;
+  background: #f3f4f6;
+}
+
+.previewInfo {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* ---- 一括ダウンロードボタン ---- */
+.phaseActions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.batchDownloadButton {
+  display: inline-block;
+  padding: 8px 18px;
+  background: linear-gradient(135deg, #10b981, #059669);
+  color: white;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: none;
+  transition: opacity 0.2s ease;
+  white-space: nowrap;
+}
+
+.batchDownloadButton:hover {
+  opacity: 0.9;
+}
+
 /* ---- フッター ---- */
 .footer {
   text-align: center;
