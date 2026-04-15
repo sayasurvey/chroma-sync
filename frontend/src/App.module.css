@@ -153,6 +153,259 @@
   background: #fef2f2;
 }
 
+/* ---- 選択済みファイルリスト ---- */
+.selectedFileList {
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  overflow: hidden;
+  background: white;
+}
+
+.selectedFileListHeader {
+  padding: 8px 14px;
+  background: #f9fafb;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.selectedFileCount {
+  font-size: 13px;
+  font-weight: 600;
+  color: #374151;
+}
+
+.selectedFileItem {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border-bottom: 1px solid #f3f4f6;
+}
+
+.selectedFileItem:last-child {
+  border-bottom: none;
+}
+
+.fileIconSmall {
+  color: #6366f1;
+  flex-shrink: 0;
+}
+
+.selectedFileName {
+  flex: 1;
+  font-size: 13px;
+  font-weight: 500;
+  color: #1e40af;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.selectedFileSize {
+  font-size: 12px;
+  color: #9ca3af;
+  flex-shrink: 0;
+}
+
+.removeButton {
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 1px solid #fca5a5;
+  border-radius: 4px;
+  color: #ef4444;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  line-height: 1;
+  flex-shrink: 0;
+  transition: background-color 0.15s ease;
+}
+
+.removeButton:hover {
+  background: #fef2f2;
+}
+
+/* ---- 変換フェーズ ---- */
+.conversionPhase {
+  max-width: 800px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.conversionPhaseHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 16px;
+}
+
+.conversionSummary {
+  margin: 4px 0 0 0;
+  font-size: 14px;
+}
+
+.summarySuccess {
+  color: #10b981;
+  font-weight: 600;
+}
+
+.summaryFail {
+  color: #ef4444;
+  font-weight: 600;
+}
+
+.conversionList {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* ---- 変換アイテムカード ---- */
+.conversionItem {
+  background: white;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.conversionItemFailed {
+  border-color: #fecaca;
+}
+
+.conversionItemHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  gap: 12px;
+}
+
+.conversionItemNameRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.conversionItemName {
+  font-size: 14px;
+  font-weight: 500;
+  color: #111827;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.conversionItemSize {
+  font-size: 12px;
+  color: #9ca3af;
+  flex-shrink: 0;
+}
+
+.conversionItemBody {
+  padding: 12px 16px;
+  border-top: 1px solid #f3f4f6;
+}
+
+/* ---- ステータスバッジ ---- */
+.badge {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.badgeIdle {
+  background: #f3f4f6;
+  color: #6b7280;
+}
+
+.badgeUploading {
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+
+.badgeConverting {
+  background: #ede9fe;
+  color: #6d28d9;
+}
+
+.badgeCompleted {
+  background: #d1fae5;
+  color: #065f46;
+}
+
+.badgeFailed {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+/* ---- 結果統計 ---- */
+.resultStats {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.resultStat {
+  font-size: 13px;
+  color: #374151;
+}
+
+.arrow {
+  color: #9ca3af;
+}
+
+.deltaGood {
+  color: #10b981;
+  font-weight: 600;
+}
+
+.deltaWarn {
+  color: #f59e0b;
+  font-weight: 600;
+}
+
+.correctionBadge {
+  font-size: 11px;
+  font-weight: 600;
+  color: #1d4ed8;
+  background: #dbeafe;
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+
+.downloadLink {
+  display: inline-block;
+  padding: 8px 18px;
+  background: #6366f1;
+  color: white;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: none;
+  transition: background-color 0.2s ease;
+}
+
+.downloadLink:hover {
+  background: #4f46e5;
+}
+
+.itemError {
+  font-size: 13px;
+  color: #dc2626;
+  margin: 0;
+}
+
+/* ---- フッター ---- */
 .footer {
   text-align: center;
   padding: 16px;

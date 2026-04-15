@@ -42,3 +42,15 @@ export interface ConversionResult {
   correctionsApplied: boolean
   correctionRegionsCount: number
 }
+
+export type ItemState = 'idle' | 'uploading' | 'converting' | 'completed' | 'failed'
+
+export interface FileConversionItem {
+  id: string
+  file: File
+  state: ItemState
+  jobId: string | null
+  progress: ConversionProgress | null
+  result: ConversionResult | null
+  error: string | null
+}
