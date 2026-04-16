@@ -86,3 +86,8 @@ export function getDownloadUrl(jobId: string): string {
 export function getPreviewUrl(jobId: string): string {
   return `${API_BASE}/convert/${jobId}/preview`
 }
+
+export function getBatchDownloadUrl(jobIds: string[]): string {
+  const params = jobIds.map(id => `job_ids=${encodeURIComponent(id)}`).join('&')
+  return `${API_BASE}/convert/batch-download?${params}`
+}

@@ -1,11 +1,13 @@
 import asyncio
+import io
 import json
 import os
+import zipfile
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, File, Form, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
-from fastapi.responses import FileResponse
+from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile, WebSocket, WebSocketDisconnect
+from fastapi.responses import FileResponse, StreamingResponse
 
 from app.config import settings
 from app.models.job import ConversionOptions
@@ -147,6 +149,31 @@ async def get_preview(job_id: str) -> FileResponse:
         raise HTTPException(status_code=404, detail="変換ファイルが見つかりません")
 
     return FileResponse(job.output_file_path, media_type="image/jpeg")
+
+
+@router.get("/convert/batch-download")
+async def batch_download_results(job_ids: list[str] = Query(...)) -> StreamingResponse:
+    """複数の変換結果をZIPファイルとしてまとめてダウンロードする"""
+    if not job_ids:
+        raise HTTPException(status_code=400, detail="job_ids を指定してください")
+
+    zip_buffer = io.BytesIO()
+    with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zf:
+        for job_id in job_ids:
+            job = job_queue.get_job(job_id)
+            if not job or job.status != "completed" or not job.output_file_path:
+                continue
+            if not os.path.exists(job.output_file_path):
+                continue
+            arcname = Path(job.original_filename).stem + ".jpg"
+            zf.write(job.output_file_path, arcname)
+
+    zip_buffer.seek(0)
+    return StreamingResponse(
+        zip_buffer,
+        media_type="application/zip",
+        headers={"Content-Disposition": "attachment; filename=chroma-sync-results.zip"},
+    )
 
 
 @ws_router.websocket("/ws/{job_id}")
