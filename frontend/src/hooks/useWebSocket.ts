@@ -1,8 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ConversionProgress } from '@/types/conversion'
 
+// Electron環境ではpreload.jsで注入されたベースURLを使用する
 const WS_BASE = typeof window !== 'undefined'
-  ? `${window.location.protocol === 'https:' ? 'wss' : 'ws'}://${window.location.host}`
+  ? (window.__CHROMA_SYNC__?.apiBaseUrl
+      ? window.__CHROMA_SYNC__.apiBaseUrl.replace(/^http/, 'ws')
+      : `${window.location.protocol === 'https:' ? 'wss' : 'ws'}://${window.location.host}`)
   : 'ws://localhost:8000'
 
 export function useWebSocket(jobId: string | null) {

@@ -1,0 +1,167 @@
+name: Build Desktop App
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  # -----------------------------------------------------------------------
+  # macOS ビルド（Apple Silicon arm64 + Intel x64）
+  # -----------------------------------------------------------------------
+  build-mac:
+    runs-on: macos-14   # Apple Silicon (arm64) ランナー
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Python 3.11 のセットアップ
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Node.js のセットアップ
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: ImageMagick のインストール (Homebrew)
+        run: brew install imagemagick ghostscript little-cms2
+
+      - name: Poetry のインストール
+        run: pip install poetry==1.8.2
+
+      - name: Pythonパッケージのインストール
+        working-directory: backend
+        run: |
+          poetry config virtualenvs.create false
+          poetry install --no-interaction --no-ansi
+
+      - name: PyInstaller のインストール
+        run: pip install pyinstaller
+
+      - name: バックエンドのビルド (PyInstaller)
+        working-directory: backend
+        run: pyinstaller chroma_sync.spec --clean
+
+      - name: Nodeパッケージのインストール（ルート）
+        run: npm install
+
+      - name: フロントエンドのビルド
+        run: npm run build:frontend
+
+      - name: Electronアプリのビルド (macOS)
+        run: npm run dist:mac
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CSC_IDENTITY_AUTO_DISCOVERY: false   # コード署名なし（CI用）
+
+      - name: アーティファクトのアップロード
+        uses: actions/upload-artifact@v4
+        with:
+          name: ChromaSync-mac
+          path: |
+            dist-electron/*.dmg
+            dist-electron/*.zip
+          retention-days: 30
+
+  # -----------------------------------------------------------------------
+  # Windows ビルド (x64)
+  # -----------------------------------------------------------------------
+  build-win:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Python 3.11 のセットアップ
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Node.js のセットアップ
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: ImageMagick のインストール (winget)
+        run: |
+          # ImageMagick Q16-HDRI版をダウンロードしてインストール
+          $url = "https://imagemagick.org/archive/binaries/ImageMagick-7.1.1-47-Q16-HDRI-x64-dll.exe"
+          $installer = "$env:TEMP\imagemagick.exe"
+          Invoke-WebRequest -Uri $url -OutFile $installer
+          Start-Process -FilePath $installer -ArgumentList "/SILENT", "/NORESTART" -Wait
+          echo "C:\Program Files\ImageMagick-7.1.1-Q16-HDRI" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+        shell: pwsh
+
+      - name: Poetry のインストール
+        run: pip install poetry==1.8.2
+
+      - name: Pythonパッケージのインストール
+        working-directory: backend
+        run: |
+          poetry config virtualenvs.create false
+          poetry install --no-interaction --no-ansi
+
+      - name: PyInstaller のインストール
+        run: pip install pyinstaller
+
+      - name: バックエンドのビルド (PyInstaller)
+        working-directory: backend
+        env:
+          MAGICK_HOME: 'C:\Program Files\ImageMagick-7.1.1-Q16-HDRI'
+        run: pyinstaller chroma_sync.spec --clean
+
+      - name: Nodeパッケージのインストール（ルート）
+        run: npm install
+
+      - name: フロントエンドのビルド
+        run: npm run build:frontend
+
+      - name: Electronアプリのビルド (Windows)
+        run: npm run dist:win
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: アーティファクトのアップロード
+        uses: actions/upload-artifact@v4
+        with:
+          name: ChromaSync-win
+          path: |
+            dist-electron/*.exe
+            dist-electron/*.zip
+          retention-days: 30
+
+  # -----------------------------------------------------------------------
+  # GitHub Releaseの作成（タグプッシュ時のみ）
+  # -----------------------------------------------------------------------
+  release:
+    needs: [build-mac, build-win]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    steps:
+      - name: macOSアーティファクトのダウンロード
+        uses: actions/download-artifact@v4
+        with:
+          name: ChromaSync-mac
+          path: release/mac
+
+      - name: Windowsアーティファクトのダウンロード
+        uses: actions/download-artifact@v4
+        with:
+          name: ChromaSync-win
+          path: release/win
+
+      - name: GitHub Releaseの作成
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            release/mac/*.dmg
+            release/mac/*.zip
+            release/win/*.exe
+            release/win/*.zip
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

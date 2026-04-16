@@ -28,6 +28,13 @@ dist/
 # アップロードファイル（一時）
 backend/uploads/
 
+# Electronビルド成果物
+dist-electron/
+frontend/dist/
+backend/dist/
+backend/build/
+*.spec.bak
+
 # OS
 .DS_Store
 Thumbs.db
