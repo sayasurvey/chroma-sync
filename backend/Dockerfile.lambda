@@ -1,0 +1,42 @@
+# Lambda用Dockerイメージ（Amazon Linux 2023ベース）
+FROM public.ecr.aws/lambda/python:3.11
+
+# ImageMagick と依存パッケージのインストール
+RUN dnf install -y \
+    ImageMagick \
+    ImageMagick-devel \
+    ghostscript \
+    lcms2 \
+    lcms2-devel \
+    gcc \
+    && dnf clean all
+
+# ImageMagick のポリシーを変更して PDF/AI/EPS/PS 処理を許可
+RUN for policy_xml in /etc/ImageMagick-7/policy.xml /etc/ImageMagick-6/policy.xml; do \
+      [ -f "$policy_xml" ] && sed -i \
+        -e 's/rights="none" pattern="PDF"/rights="read|write" pattern="PDF"/g' \
+        -e 's/rights="none" pattern="PS"/rights="read|write" pattern="PS"/g' \
+        -e 's/rights="none" pattern="EPS"/rights="read|write" pattern="EPS"/g' \
+        -e 's/rights="none" pattern="XPS"/rights="read|write" pattern="XPS"/g' \
+        "$policy_xml" || true; \
+    done
+
+# メモリ制限を引き上げて大きな AI ファイルを処理できるようにする
+RUN for policy_xml in /etc/ImageMagick-7/policy.xml /etc/ImageMagick-6/policy.xml; do \
+      [ -f "$policy_xml" ] && sed -i \
+        -e 's/<policy domain="resource" name="memory" value="[^"]*"\/>/<policy domain="resource" name="memory" value="2GiB"\/>/' \
+        -e 's/<policy domain="resource" name="disk" value="[^"]*"\/>/<policy domain="resource" name="disk" value="4GiB"\/>/' \
+        "$policy_xml" || true; \
+    done
+
+# Python依存パッケージのインストール
+COPY requirements-lambda.txt ${LAMBDA_TASK_ROOT}/
+RUN pip install --no-cache-dir -r ${LAMBDA_TASK_ROOT}/requirements-lambda.txt
+
+# アプリケーションコードのコピー
+COPY app/ ${LAMBDA_TASK_ROOT}/app/
+COPY lambda_handler.py ${LAMBDA_TASK_ROOT}/
+COPY worker_handler.py ${LAMBDA_TASK_ROOT}/
+
+# Lambda関数のデフォルトハンドラー（デプロイ時に上書き可能）
+CMD ["lambda_handler.handler"]

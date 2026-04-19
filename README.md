@@ -121,6 +121,83 @@ git tag v0.1.0
 git push origin v0.1.0
 ```
 
+## AWS デプロイ（S3 + CloudFront + Lambda）
+
+### アーキテクチャ
+
+```
+ブラウザ → Route53 → CloudFront
+  ├── /* → S3（React静的ファイル）
+  └── /api/* → API Gateway → Lambda (FastAPI)
+                                  ↓ S3（ファイル保存）
+                                  ↓ DynamoDB（ジョブ状態）
+                                  ↓ SQS → Lambda Worker（変換処理）
+
+ECR
+  ├── chroma-sync-api イメージ   → Lambda (FastAPI) が参照
+  └── chroma-sync-worker イメージ → Lambda Worker が参照
+```
+
+### 初回セットアップ（bootstrap）
+
+**前提条件:**
+- AWS CLI 設定済み（デプロイ権限を持つIAMユーザー）
+- Terraform 1.5+
+- Docker
+
+**1. ブートストラップスクリプトを実行**
+
+以下を一度だけ実行してください。OIDC プロバイダー・IAMロール・Terraform state用S3バケットを自動作成します。
+
+```bash
+cd infra
+bash bootstrap.sh
+```
+
+実行後、`infra/.env.deploy` に `AWS_ROLE_ARN` が出力されます。
+
+**2. GitHub Secretsに追加**
+
+[GitHub → Settings → Secrets → Actions](https://github.com/sayasurvey/chroma-sync/settings/secrets/actions) を開き、以下を追加します：
+
+| Secret | 値（.env.deployを参照） |
+|--------|------|
+| `AWS_ROLE_ARN` | `arn:aws:iam::...` |
+
+**3. mainにマージしてデプロイ**
+
+```bash
+git push origin main
+```
+
+GitHub Actionsが自動で以下を実行します：
+1. DockerイメージをビルドしてECRにプッシュ
+2. TerraformでAWSインフラを構築・更新
+3. フロントエンドをビルドしてS3にアップロード
+4. CloudFrontキャッシュを無効化
+
+デプロイ完了後、GitHub Actionsのサマリーにフロントエンド URLが表示されます。
+
+### GitHub Actionsによる自動デプロイ
+
+`main` ブランチへのpushで自動デプロイされます（初回bootstrap完了後）。
+
+**必要なSecrets:**
+| Secret | 内容 |
+|--------|------|
+| `AWS_ROLE_ARN` | GitHub OIDC認証用IAMロールのARN（bootstrap.shが出力） |
+
+### カスタムドメインを使う場合
+
+```bash
+cd infra
+terraform apply -var="domain_name=chroma-sync.example.com" ...
+```
+
+Route53のホストゾーンが事前に作成されている必要があります。
+
+---
+
 ## 色差の基準
 
 本アプリでは CIEDE2000 規格の ΔE 値を使用して色ずれを評価しています。

@@ -1,13 +1,10 @@
-import asyncio
 import io
-import json
-import os
 import zipfile
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile, WebSocket, WebSocketDisconnect
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile
+from fastapi.responses import FileResponse, RedirectResponse, StreamingResponse
 
 from app.config import settings
 from app.models.job import ConversionOptions
@@ -15,7 +12,6 @@ from app.services.file_manager import FileManager
 from app.services.job_queue import JobQueue
 
 router = APIRouter()
-ws_router = APIRouter()  # /api プレフィックスなしで登録する WebSocket 専用ルーター
 job_queue = JobQueue()
 file_manager = FileManager(settings.upload_dir)
 
@@ -42,7 +38,6 @@ async def start_conversion(
     """ファイルをアップロードして変換ジョブを開始する"""
     _validate_file(file.filename or "")
 
-    # ファイルサイズチェック
     content = await file.read()
     if len(content) > settings.max_upload_size_mb * 1024 * 1024:
         raise HTTPException(
@@ -50,19 +45,26 @@ async def start_conversion(
             detail=f"ファイルサイズが大きすぎます。{settings.max_upload_size_mb}MB以下のファイルをご使用ください",
         )
 
-    # ファイルを保存
-    input_path = await file_manager.save_upload(content, file.filename or "upload")
-
-    # 変換オプション
     options = ConversionOptions(
         target_size_kb=target_size_kb,
         quality=quality,
         max_delta_e=max_delta_e,
     )
-
-    # ジョブをキューに追加
     original_filename = file.filename or "upload"
-    job = await job_queue.enqueue(input_path, options, original_filename)
+
+    if settings.use_aws:
+        # AWSモード: S3にアップロードしてSQSキューに投入
+        from app.services.storage import S3Storage
+        import uuid
+
+        storage = S3Storage(settings.s3_bucket, settings.aws_region)
+        job_id = str(uuid.uuid4())
+        input_s3_key = await storage.save_upload(content, original_filename, job_id)
+        job = await job_queue.enqueue(input_s3_key, options, original_filename)
+    else:
+        # ローカルモード: ローカルファイルシステムに保存
+        input_path = await file_manager.save_upload(content, original_filename)
+        job = await job_queue.enqueue(input_path, options, original_filename)
 
     return {"job_id": job.job_id, "status": job.status}
 
@@ -74,9 +76,11 @@ async def get_conversion_status(job_id: str) -> dict[str, Any]:
     if not job:
         raise HTTPException(status_code=404, detail="ジョブが見つかりません")
 
-    result = {
+    result: dict[str, Any] = {
         "job_id": job.job_id,
         "status": job.status,
+        "progress": job.progress,
+        "message": job.progress_message,
         "created_at": job.created_at.isoformat(),
     }
     if job.completed_at:
@@ -115,8 +119,8 @@ async def get_conversion_result(job_id: str) -> dict[str, Any]:
 
 
 @router.get("/convert/{job_id}/download")
-async def download_result(job_id: str) -> FileResponse:
-    """変換後のJPEGファイルをダウンロードする"""
+async def download_result(job_id: str) -> FileResponse | RedirectResponse:
+    """変換後のJPEGファイルをダウンロードする。AWSモードではS3署名付きURLにリダイレクト"""
     job = job_queue.get_job(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="ジョブが見つかりません")
@@ -124,20 +128,26 @@ async def download_result(job_id: str) -> FileResponse:
     if job.status != "completed" or not job.output_file_path:
         raise HTTPException(status_code=400, detail="変換がまだ完了していません")
 
-    if not os.path.exists(job.output_file_path):
-        raise HTTPException(status_code=404, detail="変換ファイルが見つかりません")
+    if settings.use_aws:
+        from app.services.storage import S3Storage
 
-    download_name = Path(job.original_filename).stem + ".jpg"
-    return FileResponse(
-        job.output_file_path,
-        media_type="image/jpeg",
-        filename=download_name,
-    )
+        storage = S3Storage(settings.s3_bucket, settings.aws_region)
+        if not storage.object_exists(job.output_file_path):
+            raise HTTPException(status_code=404, detail="変換ファイルが見つかりません")
+        url = storage.generate_presigned_url(job.output_file_path, expires_in=300)
+        return RedirectResponse(url=url, status_code=302)
+    else:
+        import os
+
+        if not os.path.exists(job.output_file_path):
+            raise HTTPException(status_code=404, detail="変換ファイルが見つかりません")
+        download_name = Path(job.original_filename).stem + ".jpg"
+        return FileResponse(job.output_file_path, media_type="image/jpeg", filename=download_name)
 
 
 @router.get("/convert/{job_id}/preview")
-async def get_preview(job_id: str) -> FileResponse:
-    """変換後のJPEGプレビューを返す"""
+async def get_preview(job_id: str) -> FileResponse | RedirectResponse:
+    """変換後のJPEGプレビューを返す。AWSモードではS3署名付きURLにリダイレクト"""
     job = job_queue.get_job(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="ジョブが見つかりません")
@@ -145,10 +155,20 @@ async def get_preview(job_id: str) -> FileResponse:
     if job.status != "completed" or not job.output_file_path:
         raise HTTPException(status_code=400, detail="変換がまだ完了していません")
 
-    if not os.path.exists(job.output_file_path):
-        raise HTTPException(status_code=404, detail="変換ファイルが見つかりません")
+    if settings.use_aws:
+        from app.services.storage import S3Storage
 
-    return FileResponse(job.output_file_path, media_type="image/jpeg")
+        storage = S3Storage(settings.s3_bucket, settings.aws_region)
+        if not storage.object_exists(job.output_file_path):
+            raise HTTPException(status_code=404, detail="変換ファイルが見つかりません")
+        url = storage.generate_presigned_url(job.output_file_path, expires_in=3600)
+        return RedirectResponse(url=url, status_code=302)
+    else:
+        import os
+
+        if not os.path.exists(job.output_file_path):
+            raise HTTPException(status_code=404, detail="変換ファイルが見つかりません")
+        return FileResponse(job.output_file_path, media_type="image/jpeg")
 
 
 @router.get("/convert/batch-download")
@@ -159,14 +179,35 @@ async def batch_download_results(job_ids: list[str] = Query(...)) -> StreamingRe
 
     zip_buffer = io.BytesIO()
     with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zf:
-        for job_id in job_ids:
-            job = job_queue.get_job(job_id)
-            if not job or job.status != "completed" or not job.output_file_path:
-                continue
-            if not os.path.exists(job.output_file_path):
-                continue
-            arcname = Path(job.original_filename).stem + ".jpg"
-            zf.write(job.output_file_path, arcname)
+        if settings.use_aws:
+            import os
+            import tempfile
+
+            from app.services.storage import S3Storage
+
+            storage = S3Storage(settings.s3_bucket, settings.aws_region)
+            with tempfile.TemporaryDirectory() as tmpdir:
+                for job_id in job_ids:
+                    job = job_queue.get_job(job_id)
+                    if not job or job.status != "completed" or not job.output_file_path:
+                        continue
+                    if not storage.object_exists(job.output_file_path):
+                        continue
+                    tmp_path = os.path.join(tmpdir, f"{job_id}.jpg")
+                    storage.download_to_path(job.output_file_path, tmp_path)
+                    arcname = Path(job.original_filename).stem + ".jpg"
+                    zf.write(tmp_path, arcname)
+        else:
+            import os
+
+            for job_id in job_ids:
+                job = job_queue.get_job(job_id)
+                if not job or job.status != "completed" or not job.output_file_path:
+                    continue
+                if not os.path.exists(job.output_file_path):
+                    continue
+                arcname = Path(job.original_filename).stem + ".jpg"
+                zf.write(job.output_file_path, arcname)
 
     zip_buffer.seek(0)
     return StreamingResponse(
@@ -174,38 +215,3 @@ async def batch_download_results(job_ids: list[str] = Query(...)) -> StreamingRe
         media_type="application/zip",
         headers={"Content-Disposition": "attachment; filename=chroma-sync-results.zip"},
     )
-
-
-@ws_router.websocket("/ws/{job_id}")
-async def websocket_progress(websocket: WebSocket, job_id: str) -> None:
-    """WebSocketで変換進捗をリアルタイム通知する"""
-    await websocket.accept()
-
-    try:
-        while True:
-            job = job_queue.get_job(job_id)
-            if not job:
-                await websocket.send_text(json.dumps({"error": "ジョブが見つかりません"}))
-                break
-
-            progress_data = {
-                "job_id": job.job_id,
-                "status": job.status,
-                "progress": job.progress,
-                "message": job.progress_message,
-            }
-
-            if job.delta_e is not None:
-                progress_data["delta_e"] = job.delta_e
-            if job.error:
-                progress_data["error"] = job.error
-
-            await websocket.send_text(json.dumps(progress_data))
-
-            if job.status in ("completed", "failed"):
-                break
-
-            await asyncio.sleep(0.5)
-
-    except WebSocketDisconnect:
-        pass

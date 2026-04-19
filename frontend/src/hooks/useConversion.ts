@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { getConversionResult, getJobStatus, startConversion } from '@/api/client'
 import type { ConversionOptions, ConversionProgress, ConversionResult } from '@/types/conversion'
-import { useWebSocket } from './useWebSocket'
 
 export type ConversionState = 'idle' | 'uploading' | 'converting' | 'completed' | 'failed'
 
@@ -10,16 +9,15 @@ export function useConversion() {
   const [jobId, setJobId] = useState<string | null>(null)
   const [result, setResult] = useState<ConversionResult | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [localProgress, setLocalProgress] = useState<ConversionProgress | null>(null)
-  const { progress: wsProgress } = useWebSocket(jobId)
+  const [progress, setProgress] = useState<ConversionProgress | null>(null)
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const completedRef = useRef(false)
 
-  const finishJob = useCallback((jobId: string) => {
+  const finishJob = useCallback((id: string) => {
     if (completedRef.current) return
     completedRef.current = true
     setState('completed')
-    getConversionResult(jobId)
+    getConversionResult(id)
       .then(setResult)
       .catch((err: Error) => {
         setError(err.message)
@@ -27,68 +25,47 @@ export function useConversion() {
       })
   }, [])
 
-  // WebSocket の進捗を監視
-  useEffect(() => {
-    if (!wsProgress) return
-
-    setLocalProgress(wsProgress)
-
-    if (wsProgress.status === 'completed') {
-      finishJob(wsProgress.jobId)
-    } else if (wsProgress.status === 'failed') {
-      if (!completedRef.current) {
-        completedRef.current = true
-        setState('failed')
-        setError(wsProgress.error ?? '変換中にエラーが発生しました')
-      }
-    }
-  }, [wsProgress, finishJob])
-
-  // WebSocket が来ない場合のポーリングフォールバック
+  // ジョブIDが設定されたらポーリング開始
   useEffect(() => {
     if (state !== 'converting' || !jobId) return
 
-    // 3秒後にポーリング開始（WebSocket が動いていれば不要）
-    const startDelay = setTimeout(() => {
-      pollingRef.current = setInterval(async () => {
-        if (completedRef.current) {
+    pollingRef.current = setInterval(async () => {
+      if (completedRef.current) {
+        clearInterval(pollingRef.current!)
+        return
+      }
+      try {
+        const job = await getJobStatus(jobId)
+        setProgress({
+          jobId: job.jobId,
+          status: job.status,
+          progress: job.status === 'completed' ? 100 : job.status === 'processing' ? 50 : 10,
+          message:
+            job.status === 'completed'
+              ? '変換完了'
+              : job.status === 'failed'
+                ? 'エラー'
+                : '変換処理中...',
+          deltaE: job.deltaE,
+          error: job.error,
+        })
+        if (job.status === 'completed') {
           clearInterval(pollingRef.current!)
-          return
-        }
-        try {
-          const job = await getJobStatus(jobId)
-          setLocalProgress({
-            jobId: job.jobId,
-            status: job.status,
-            progress: job.status === 'completed' ? 100 : job.status === 'processing' ? 50 : 10,
-            message:
-              job.status === 'completed'
-                ? '変換完了'
-                : job.status === 'failed'
-                  ? 'エラー'
-                  : '変換処理中...',
-            deltaE: job.deltaE,
-            error: job.error,
-          })
-          if (job.status === 'completed') {
-            clearInterval(pollingRef.current!)
-            finishJob(jobId)
-          } else if (job.status === 'failed') {
-            clearInterval(pollingRef.current!)
-            if (!completedRef.current) {
-              completedRef.current = true
-              setState('failed')
-              setError(job.error ?? '変換中にエラーが発生しました')
-            }
+          finishJob(jobId)
+        } else if (job.status === 'failed') {
+          clearInterval(pollingRef.current!)
+          if (!completedRef.current) {
+            completedRef.current = true
+            setState('failed')
+            setError(job.error ?? '変換中にエラーが発生しました')
           }
-        } catch {
-          // ポーリングエラーは無視して再試行
         }
-      }, 1500)
-    }, 3000)
+      } catch {
+        // ポーリングエラーは無視して再試行
+      }
+    }, 2000)
 
     return () => {
-      clearTimeout(startDelay)
       if (pollingRef.current) clearInterval(pollingRef.current)
     }
   }, [state, jobId, finishJob])
@@ -98,10 +75,10 @@ export function useConversion() {
     setError(null)
     setResult(null)
     setJobId(null)
-    setLocalProgress(null)
+    setProgress(null)
     completedRef.current = false
 
-    setLocalProgress({
+    setProgress({
       jobId: '',
       status: 'pending',
       progress: 0,
@@ -112,7 +89,7 @@ export function useConversion() {
       const job = await startConversion(file, options)
       setJobId(job.jobId)
       setState('converting')
-      setLocalProgress({
+      setProgress({
         jobId: job.jobId,
         status: 'pending',
         progress: 5,
@@ -121,7 +98,7 @@ export function useConversion() {
     } catch (err) {
       setState('failed')
       setError(err instanceof Error ? err.message : '変換の開始に失敗しました')
-      setLocalProgress(null)
+      setProgress(null)
     }
   }, [])
 
@@ -130,7 +107,7 @@ export function useConversion() {
     setJobId(null)
     setResult(null)
     setError(null)
-    setLocalProgress(null)
+    setProgress(null)
     completedRef.current = false
     if (pollingRef.current) clearInterval(pollingRef.current)
   }, [])
@@ -138,7 +115,7 @@ export function useConversion() {
   return {
     state,
     jobId,
-    progress: localProgress,
+    progress,
     result,
     error,
     convert,

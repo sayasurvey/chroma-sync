@@ -1,10 +1,12 @@
 import asyncio
+import json
 import logging
 import uuid
 from datetime import datetime, timedelta
 
+import boto3
+
 from app.config import settings
-from app.converter.engine import ConversionEngine
 from app.models.job import ConversionJob, ConversionOptions
 from app.models.result import ConversionResult
 from app.services.file_manager import FileManager
@@ -15,25 +17,39 @@ logger = logging.getLogger(__name__)
 class JobQueue:
     """変換ジョブキュー管理クラス。
 
+    AWS環境（S3_BUCKET設定あり）ではDynamoDB + SQSを使用する。
+    ローカル開発環境ではインメモリ + asyncio.create_taskを使用する。
+
     Note:
-        インメモリのジョブ管理のため、単一プロセス構成（シングルワーカー）のみ対応。
-        uvicorn --workers 2 等のマルチプロセス構成では各プロセスで独立したキューを
-        持つことになり、異なるプロセス間でジョブを参照できなくなる。
+        ローカルモードはインメモリのため、単一プロセス構成（シングルワーカー）のみ対応。
     """
 
     def __init__(self) -> None:
-        self._jobs: dict[str, ConversionJob] = {}
-        self._results: dict[str, ConversionResult] = {}
-        self._engine = ConversionEngine()
-        self._file_manager = FileManager(settings.upload_dir)
+        self._use_aws = settings.use_aws
+
+        if self._use_aws:
+            from app.services.job_repository import JobRepository
+            from app.services.storage import S3Storage
+
+            self._repo = JobRepository(settings.dynamodb_table, settings.file_retention_hours)
+            self._storage = S3Storage(settings.s3_bucket, settings.aws_region)
+            self._sqs = boto3.client("sqs", region_name=settings.aws_region)
+        else:
+            # ローカル開発用インメモリストレージ
+            self._jobs: dict[str, ConversionJob] = {}
+            self._results: dict[str, ConversionResult] = {}
+            from app.converter.engine import ConversionEngine
+
+            self._engine = ConversionEngine()
+            self._file_manager = FileManager(settings.upload_dir)
 
     async def enqueue(
         self, input_path: str, options: ConversionOptions, original_filename: str = ""
     ) -> ConversionJob:
-        """変換ジョブをキューに追加し、非同期で処理を開始する。
+        """変換ジョブをキューに追加する。
 
         Args:
-            input_path: 入力ファイルのパス
+            input_path: AWSモードではS3キー、ローカルモードではファイルパス
             options: 変換オプション
             original_filename: アップロード時の元ファイル名
 
@@ -47,19 +63,30 @@ class JobQueue:
             original_filename=original_filename,
             options=options,
         )
-        self._jobs[job_id] = job
 
-        # 非同期でジョブを処理
-        asyncio.create_task(self._process_job(job))
+        if self._use_aws:
+            self._repo.save_job(job)
+            self._sqs.send_message(
+                QueueUrl=settings.sqs_queue_url,
+                MessageBody=json.dumps({
+                    "job_id": job_id,
+                    "input_s3_key": input_path,
+                    "original_filename": original_filename,
+                    "options": {
+                        "target_size_kb": options.target_size_kb,
+                        "quality": options.quality,
+                        "max_delta_e": options.max_delta_e,
+                    },
+                }),
+            )
+        else:
+            self._jobs[job_id] = job
+            asyncio.create_task(self._process_job_local(job))
 
         return job
 
-    async def _process_job(self, job: ConversionJob) -> None:
-        """ジョブを処理する（バックグラウンドタスク）。
-
-        Args:
-            job: 処理するジョブ
-        """
+    async def _process_job_local(self, job: ConversionJob) -> None:
+        """ローカル開発用：バックグラウンドで変換処理を実行する。"""
         job.status = "processing"
         job.progress = 5
         job.progress_message = "変換処理を開始しています..."
@@ -77,7 +104,7 @@ class JobQueue:
             )
 
             self._results[job.job_id] = result
-            job.output_file_path = result.output_path  # engine が返す実際のパスで上書き
+            job.output_file_path = result.output_path
             job.delta_e = result.delta_e
             job.corrections_applied = result.corrections_applied
             job.status = "completed"
@@ -105,36 +132,22 @@ class JobQueue:
             self._file_manager.delete_file(output_path)
 
     def get_job(self, job_id: str) -> ConversionJob | None:
-        """ジョブを取得する。
-
-        Args:
-            job_id: ジョブID
-
-        Returns:
-            ジョブ（存在しない場合はNone）
-        """
+        """ジョブを取得する。"""
+        if self._use_aws:
+            return self._repo.get_job(job_id)
         return self._jobs.get(job_id)
 
     def get_result(self, job_id: str) -> ConversionResult | None:
-        """変換結果を取得する。
-
-        Args:
-            job_id: ジョブID
-
-        Returns:
-            変換結果（存在しない場合はNone）
-        """
+        """変換結果を取得する。"""
+        if self._use_aws:
+            return self._repo.get_result(job_id)
         return self._results.get(job_id)
 
     def cleanup_expired_jobs(self, retention_hours: int) -> int:
-        """指定時間を超えた完了済みジョブをメモリから削除する。
+        """ローカルモード：期限切れジョブをメモリから削除する。AWSモードはDynamoDB TTLに委譲。"""
+        if self._use_aws:
+            return 0
 
-        Args:
-            retention_hours: ジョブ保持時間（時間）
-
-        Returns:
-            削除されたジョブの数
-        """
         threshold = datetime.utcnow() - timedelta(hours=retention_hours)
         expired = [
             job_id
