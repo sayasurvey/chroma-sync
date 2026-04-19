@@ -24,7 +24,7 @@ resource "aws_cloudfront_distribution" "main" {
 
   # API Gateway オリジン
   origin {
-    domain_name = replace(aws_apigatewayv2_stage.default.invoke_url, "https://", "")
+    domain_name = trimsuffix(replace(aws_apigatewayv2_stage.default.invoke_url, "https://", ""), "/")
     origin_id   = "api-gateway"
 
     custom_origin_config {

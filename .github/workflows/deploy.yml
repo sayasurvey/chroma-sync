@@ -36,19 +36,34 @@ jobs:
           echo "account_id=$ACCOUNT_ID" >> $GITHUB_OUTPUT
           echo "tf_state_bucket=${{ env.APP_NAME }}-tfstate-${ACCOUNT_ID}" >> $GITHUB_OUTPUT
 
+      # ──── Terraform でECRリポジトリを先に作成（Docker push より先に必要） ────
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+          terraform_wrapper: false
+
+      - name: Terraform Init
+        working-directory: infra
+        run: |
+          terraform init \
+            -backend-config="bucket=${{ steps.aws-info.outputs.tf_state_bucket }}" \
+            -backend-config="key=${{ env.APP_NAME }}/terraform.tfstate" \
+            -backend-config="region=${{ env.AWS_REGION }}"
+
+      - name: Terraform Apply (ECR only)
+        working-directory: infra
+        run: |
+          terraform apply -auto-approve \
+            -target=aws_ecr_repository.api \
+            -target=aws_ecr_repository.worker
+
+      # ──── バックエンドDockerイメージのビルド & プッシュ ────
+
       - name: Login to Amazon ECR
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
-
-      # ECR リポジトリが存在しない場合は事前作成（Terraform より先に push が必要なため）
-      - name: Create ECR repositories if not exist
-        run: |
-          for repo in ${{ env.APP_NAME }}-api ${{ env.APP_NAME }}-worker; do
-            aws ecr describe-repositories --repository-names "$repo" 2>/dev/null || \
-              aws ecr create-repository --repository-name "$repo" --image-scanning-configuration scanOnPush=true
-          done
-
-      # ──── バックエンドDockerイメージのビルド & プッシュ ────
 
       - name: Build and push API Lambda image
         env:
@@ -79,21 +94,7 @@ jobs:
           docker push $ECR_REGISTRY/${{ env.APP_NAME }}-worker:latest
           echo "WORKER_IMAGE_URI=$ECR_REGISTRY/${{ env.APP_NAME }}-worker:$IMAGE_TAG" >> $GITHUB_ENV
 
-      # ──── Terraform でインフラを更新 ────
-
-      - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_version: ${{ env.TF_VERSION }}
-          terraform_wrapper: false
-
-      - name: Terraform Init
-        working-directory: infra
-        run: |
-          terraform init \
-            -backend-config="bucket=${{ steps.aws-info.outputs.tf_state_bucket }}" \
-            -backend-config="key=${{ env.APP_NAME }}/terraform.tfstate" \
-            -backend-config="region=${{ env.AWS_REGION }}"
+      # ──── Terraform で残りのインフラを更新 ────
 
       - name: Terraform Apply
         working-directory: infra

@@ -17,7 +17,6 @@ resource "aws_lambda_function" "api" {
       S3_BUCKET        = aws_s3_bucket.uploads.id
       DYNAMODB_TABLE   = aws_dynamodb_table.jobs.name
       SQS_QUEUE_URL    = aws_sqs_queue.conversion.url
-      AWS_DEFAULT_REGION = var.aws_region
       CORS_ORIGINS     = var.cors_origins
       MAX_UPLOAD_SIZE_MB = tostring(var.max_upload_size_mb)
     }
@@ -49,7 +48,6 @@ resource "aws_lambda_function" "worker" {
       S3_BUCKET        = aws_s3_bucket.uploads.id
       DYNAMODB_TABLE   = aws_dynamodb_table.jobs.name
       SQS_QUEUE_URL    = aws_sqs_queue.conversion.url
-      AWS_DEFAULT_REGION = var.aws_region
       MAX_UPLOAD_SIZE_MB = tostring(var.max_upload_size_mb)
     }
   }
