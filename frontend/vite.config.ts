@@ -4,6 +4,8 @@ import path from 'path'
 
 export default defineConfig({
   plugins: [react()],
+  // Electronでfile://から読み込む際に相対パスが必要
+  base: process.env.ELECTRON_BUILD ? './' : '/',
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),

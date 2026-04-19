@@ -1,6 +1,13 @@
 import type { ConversionJob, ConversionOptions, ConversionResult } from '@/types/conversion'
 
-const API_BASE = '/api'
+// Electron環境ではpreload.jsで注入されたベースURLを使用する。
+// Vite開発環境ではプロキシ経由で /api を使用する。
+declare global {
+  interface Window {
+    __CHROMA_SYNC__?: { apiBaseUrl: string }
+  }
+}
+const API_BASE = (window.__CHROMA_SYNC__?.apiBaseUrl ?? '') + '/api'
 
 async function handleResponse<T>(response: Response): Promise<T> {
   if (!response.ok) {

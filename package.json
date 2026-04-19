@@ -1,0 +1,74 @@
+{
+  "name": "chroma-sync",
+  "version": "0.1.0",
+  "description": "AI/PSDファイルをJPEGに色味を保持しながら変換するデスクトップアプリ",
+  "main": "electron/main.js",
+  "private": true,
+  "scripts": {
+    "electron:dev": "SKIP_BACKEND=1 electron .",
+    "build:frontend": "cd frontend && ELECTRON_BUILD=1 npm run build",
+    "build:backend:mac": "cd backend && pyinstaller chroma_sync.spec --clean",
+    "build:backend:win": "cd backend && pyinstaller chroma_sync.spec --clean",
+    "dist:mac": "npm run build:frontend && electron-builder --mac --arm64 --x64",
+    "dist:win": "npm run build:frontend && electron-builder --win --x64",
+    "dist:mac:arm64": "npm run build:frontend && electron-builder --mac --arm64",
+    "dist:mac:x64": "npm run build:frontend && electron-builder --mac --x64",
+    "postinstall": "electron-builder install-app-deps"
+  },
+  "devDependencies": {
+    "electron": "^31.0.0",
+    "electron-builder": "^24.13.3"
+  },
+  "build": {
+    "appId": "com.chroma-sync.app",
+    "productName": "ChromaSync",
+    "copyright": "Copyright © 2024 chroma-sync",
+    "directories": {
+      "output": "dist-electron",
+      "buildResources": "build-assets"
+    },
+    "files": [
+      "electron/**/*",
+      "frontend/dist/**/*",
+      "!**/*.map"
+    ],
+    "extraResources": [
+      {
+        "from": "backend/dist/chroma_sync",
+        "to": "backend/chroma_sync",
+        "filter": ["**/*"]
+      }
+    ],
+    "mac": {
+      "category": "public.app-category.graphics-design",
+      "target": [
+        { "target": "dmg", "arch": ["arm64", "x64"] },
+        { "target": "zip", "arch": ["arm64", "x64"] }
+      ],
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false,
+      "entitlements": "build-assets/entitlements.mac.plist",
+      "entitlementsInherit": "build-assets/entitlements.mac.plist"
+    },
+    "win": {
+      "target": [
+        { "target": "nsis", "arch": ["x64"] },
+        { "target": "zip", "arch": ["x64"] }
+      ],
+      "icon": "build-assets/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    },
+    "dmg": {
+      "title": "ChromaSync ${version}",
+      "contents": [
+        { "x": 410, "y": 150, "type": "link", "path": "/Applications" },
+        { "x": 130, "y": 150, "type": "file" }
+      ]
+    }
+  }
+}

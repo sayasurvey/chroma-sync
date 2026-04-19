@@ -22,11 +22,33 @@ node_modules/
 dist/
 .vite/
 
-# Docker
+# Docker / 環境変数
 .env
+.env.*
+
+# Terraform
+*.tfstate
+*.tfstate.*
+*.tfvars
+*.tfvars.json
+.terraform/
+.terraform.lock.hcl
+infra/.terraform/
+infra/terraform.tfstate*
+
+# デプロイ用一時ファイル（機密情報を含む）
+infra/.env.deploy
+.env.deploy
 
 # アップロードファイル（一時）
 backend/uploads/
+
+# Electronビルド成果物
+dist-electron/
+frontend/dist/
+backend/dist/
+backend/build/
+*.spec.bak
 
 # OS
 .DS_Store

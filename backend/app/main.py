@@ -6,35 +6,33 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api import convert, health
-from app.api.convert import job_queue, ws_router
+from app.api.convert import job_queue
 from app.config import settings
 from app.services.file_manager import FileManager
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """アプリケーションの起動・終了処理"""
-    # アップロードディレクトリの作成
-    os.makedirs(settings.upload_dir, exist_ok=True)
-
-    # 期限切れファイルの定期削除タスクを開始
-    file_manager = FileManager(settings.upload_dir)
-    cleanup_task = asyncio.create_task(_periodic_cleanup(file_manager))
+    """アプリケーションの起動・終了処理（ローカル開発環境のみ）"""
+    if not settings.use_aws:
+        os.makedirs(settings.upload_dir, exist_ok=True)
+        file_manager = FileManager(settings.upload_dir)
+        cleanup_task = asyncio.create_task(_periodic_cleanup(file_manager))
 
     yield
 
-    # 終了時にクリーンアップタスクを停止
-    cleanup_task.cancel()
-    try:
-        await cleanup_task
-    except asyncio.CancelledError:
-        pass
+    if not settings.use_aws:
+        cleanup_task.cancel()
+        try:
+            await cleanup_task
+        except asyncio.CancelledError:
+            pass
 
 
 async def _periodic_cleanup(file_manager: FileManager) -> None:
-    """1時間ごとに期限切れファイルとジョブをメモリから削除する"""
+    """1時間ごとに期限切れファイルとジョブをメモリから削除する（ローカル開発用）"""
     while True:
-        await asyncio.sleep(3600)  # 1時間ごとにチェック
+        await asyncio.sleep(3600)
         await file_manager.cleanup_expired_files(settings.file_retention_hours)
         job_queue.cleanup_expired_jobs(settings.file_retention_hours)
 
@@ -48,7 +46,7 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.cors_origins,  # CORS_ORIGINS 環境変数で制限可（デフォルト: ["*"]）
+    allow_origins=settings.cors_origins,
     allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -56,4 +54,3 @@ app.add_middleware(
 
 app.include_router(health.router, prefix="/api", tags=["health"])
 app.include_router(convert.router, prefix="/api", tags=["convert"])
-app.include_router(ws_router, tags=["websocket"])  # WebSocket は /ws/{job_id} にプレフィックスなし
