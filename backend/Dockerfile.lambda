@@ -1,18 +1,19 @@
-# Stage 1: AL2023でシステムパッケージをインストール・設定
-FROM amazonlinux:2023 AS builder
+# Stage 1: AL2（Lambda Python 3.11 と同じ OS）でパッケージをインストール
+FROM amazonlinux:2 AS builder
 
-RUN dnf install -y \
+# EPEL を有効化して ImageMagick / Ghostscript を取得
+RUN amazon-linux-extras install epel -y && \
+    yum install -y \
     ImageMagick \
     ImageMagick-devel \
     ghostscript \
     lcms2 \
     lcms2-devel \
     gcc \
-    python3.11-devel \
     findutils \
-    && dnf clean all
+    && yum clean all
 
-# ポリシー設定をビルダーステージで完結させる（Lambda側でsedを実行しない）
+# ポリシー設定をビルダーステージで完結させる
 RUN sed -i \
     -e 's/rights="none" pattern="PDF"/rights="read|write" pattern="PDF"/g' \
     -e 's/rights="none" pattern="PS"/rights="read|write" pattern="PS"/g' \
@@ -22,27 +23,14 @@ RUN sed -i \
     -e 's|<policy domain="resource" name="disk" value="[^"]*"/>|<policy domain="resource" name="disk" value="4GiB"/>|g' \
     /etc/ImageMagick-6/policy.xml
 
-# glibc 系（Lambda イメージ側のものと衝突する）を除外してライブラリを収集
+# ldd で /usr/lib64 配下の依存ライブラリのみ収集（/lib64 の glibc 系は除外される）
 RUN mkdir -p /deps && \
-    find /usr/lib64 -maxdepth 1 -name "*.so*" \
-    ! -name "libc.so*" \
-    ! -name "libc-*.so*" \
-    ! -name "libm.so*" \
-    ! -name "libm-*.so*" \
-    ! -name "libpthread.so*" \
-    ! -name "libpthread-*.so*" \
-    ! -name "libdl.so*" \
-    ! -name "libdl-*.so*" \
-    ! -name "librt.so*" \
-    ! -name "librt-*.so*" \
-    ! -name "libnss*.so*" \
-    ! -name "libresolv*.so*" \
-    ! -name "libutil*.so*" \
-    ! -name "libgcc_s.so*" \
-    ! -name "ld-*.so*" \
-    -exec cp -P {} /deps/ \;
+    ldd /usr/bin/convert /usr/bin/gs 2>/dev/null | \
+    grep "=> /usr/lib64" | \
+    awk '{print $3}' | sort -u | \
+    xargs -I{} cp -P {} /deps/
 
-# Stage 2: Lambda実行環境
+# Stage 2: Lambda実行環境（Amazon Linux 2 ベース）
 FROM public.ecr.aws/lambda/python:3.11
 
 # ImageMagick / Ghostscript のバイナリをコピー
@@ -50,7 +38,7 @@ COPY --from=builder /usr/bin/convert      /opt/bin/convert
 COPY --from=builder /usr/bin/identify     /opt/bin/identify
 COPY --from=builder /usr/bin/gs           /opt/bin/gs
 
-# glibc を除外したライブラリ群をコピー
+# アプリ固有のライブラリをコピー（システム glibc は Lambda 側のものを使用）
 COPY --from=builder /deps                 /opt/lib64
 
 # Ghostscript フォント・リソース
