@@ -40,6 +40,14 @@ jobs:
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
 
+      # ECR リポジトリが存在しない場合は事前作成（Terraform より先に push が必要なため）
+      - name: Create ECR repositories if not exist
+        run: |
+          for repo in ${{ env.APP_NAME }}-api ${{ env.APP_NAME }}-worker; do
+            aws ecr describe-repositories --repository-names "$repo" 2>/dev/null || \
+              aws ecr create-repository --repository-name "$repo" --image-scanning-configuration scanOnPush=true
+          done
+
       # ──── バックエンドDockerイメージのビルド & プッシュ ────
 
       - name: Build and push API Lambda image
