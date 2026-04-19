@@ -25,11 +25,13 @@ variable "domain_name" {
 variable "api_lambda_image_uri" {
   description = "API Lambda用のECRイメージURI"
   type        = string
+  default     = ""
 }
 
 variable "worker_lambda_image_uri" {
   description = "Worker Lambda用のECRイメージURI"
   type        = string
+  default     = ""
 }
 
 variable "api_lambda_memory" {
