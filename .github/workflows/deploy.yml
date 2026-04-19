@@ -14,6 +14,7 @@ jobs:
   deploy:
     name: Build & Deploy
     runs-on: ubuntu-latest
+    environment: Infra
     permissions:
       id-token: write  # OIDC認証用
       contents: read
