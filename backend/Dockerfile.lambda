@@ -1,4 +1,4 @@
-# Stage 1: AL2023でシステムパッケージをインストール
+# Stage 1: AL2023でシステムパッケージをインストール・設定
 FROM amazonlinux:2023 AS builder
 
 RUN dnf install -y \
@@ -9,41 +9,58 @@ RUN dnf install -y \
     lcms2-devel \
     gcc \
     python3.11-devel \
+    findutils \
     && dnf clean all
+
+# ポリシー設定をビルダーステージで完結させる（Lambda側でsedを実行しない）
+RUN sed -i \
+    -e 's/rights="none" pattern="PDF"/rights="read|write" pattern="PDF"/g' \
+    -e 's/rights="none" pattern="PS"/rights="read|write" pattern="PS"/g' \
+    -e 's/rights="none" pattern="EPS"/rights="read|write" pattern="EPS"/g' \
+    -e 's/rights="none" pattern="XPS"/rights="read|write" pattern="XPS"/g' \
+    -e 's|<policy domain="resource" name="memory" value="[^"]*"/>|<policy domain="resource" name="memory" value="2GiB"/>|g' \
+    -e 's|<policy domain="resource" name="disk" value="[^"]*"/>|<policy domain="resource" name="disk" value="4GiB"/>|g' \
+    /etc/ImageMagick-6/policy.xml
+
+# glibc 系（Lambda イメージ側のものと衝突する）を除外してライブラリを収集
+RUN mkdir -p /deps && \
+    find /usr/lib64 -maxdepth 1 -name "*.so*" \
+    ! -name "libc.so*" \
+    ! -name "libc-*.so*" \
+    ! -name "libm.so*" \
+    ! -name "libm-*.so*" \
+    ! -name "libpthread.so*" \
+    ! -name "libpthread-*.so*" \
+    ! -name "libdl.so*" \
+    ! -name "libdl-*.so*" \
+    ! -name "librt.so*" \
+    ! -name "librt-*.so*" \
+    ! -name "libnss*.so*" \
+    ! -name "libresolv*.so*" \
+    ! -name "libutil*.so*" \
+    ! -name "libgcc_s.so*" \
+    ! -name "ld-*.so*" \
+    -exec cp -P {} /deps/ \;
 
 # Stage 2: Lambda実行環境
 FROM public.ecr.aws/lambda/python:3.11
 
-# ImageMagick / Ghostscript のバイナリとライブラリをコピー
+# ImageMagick / Ghostscript のバイナリをコピー
 COPY --from=builder /usr/bin/convert      /opt/bin/convert
 COPY --from=builder /usr/bin/identify     /opt/bin/identify
 COPY --from=builder /usr/bin/gs           /opt/bin/gs
-COPY --from=builder /usr/lib64            /opt/lib64
+
+# glibc を除外したライブラリ群をコピー
+COPY --from=builder /deps                 /opt/lib64
+
+# Ghostscript フォント・リソース
 COPY --from=builder /usr/share/ghostscript /usr/share/ghostscript
 
-# ImageMagick のポリシーファイルをコピー（AL2023 は ImageMagick 6）
+# 編集済み ImageMagick ポリシー
 COPY --from=builder /etc/ImageMagick-6    /etc/ImageMagick-6
 
 ENV PATH="/opt/bin:${PATH}"
 ENV LD_LIBRARY_PATH="/opt/lib64:${LD_LIBRARY_PATH}"
-
-# ImageMagick のポリシーを変更して PDF/AI/EPS/PS 処理を許可
-RUN for policy_xml in /etc/ImageMagick-6/policy.xml; do \
-      [ -f "$policy_xml" ] && sed -i \
-        -e 's/rights="none" pattern="PDF"/rights="read|write" pattern="PDF"/g' \
-        -e 's/rights="none" pattern="PS"/rights="read|write" pattern="PS"/g' \
-        -e 's/rights="none" pattern="EPS"/rights="read|write" pattern="EPS"/g' \
-        -e 's/rights="none" pattern="XPS"/rights="read|write" pattern="XPS"/g' \
-        "$policy_xml" || true; \
-    done
-
-# メモリ制限を引き上げて大きな AI ファイルを処理できるようにする
-RUN for policy_xml in /etc/ImageMagick-6/policy.xml; do \
-      [ -f "$policy_xml" ] && sed -i \
-        -e 's/<policy domain="resource" name="memory" value="[^"]*"\/>/<policy domain="resource" name="memory" value="2GiB"\/>/' \
-        -e 's/<policy domain="resource" name="disk" value="[^"]*"\/>/<policy domain="resource" name="disk" value="4GiB"\/>/' \
-        "$policy_xml" || true; \
-    done
 
 # Python依存パッケージのインストール
 COPY requirements-lambda.txt ${LAMBDA_TASK_ROOT}/
