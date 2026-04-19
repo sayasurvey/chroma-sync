@@ -20,17 +20,15 @@ COPY --from=builder /usr/bin/identify     /opt/bin/identify
 COPY --from=builder /usr/bin/gs           /opt/bin/gs
 COPY --from=builder /usr/lib64            /opt/lib64
 COPY --from=builder /usr/share/ghostscript /usr/share/ghostscript
-COPY --from=builder /usr/share/color      /usr/share/color
 
-# ImageMagick のポリシーファイルをコピー
+# ImageMagick のポリシーファイルをコピー（AL2023 は ImageMagick 6）
 COPY --from=builder /etc/ImageMagick-6    /etc/ImageMagick-6
-COPY --from=builder /etc/ImageMagick-7    /etc/ImageMagick-7
 
 ENV PATH="/opt/bin:${PATH}"
 ENV LD_LIBRARY_PATH="/opt/lib64:${LD_LIBRARY_PATH}"
 
 # ImageMagick のポリシーを変更して PDF/AI/EPS/PS 処理を許可
-RUN for policy_xml in /etc/ImageMagick-7/policy.xml /etc/ImageMagick-6/policy.xml; do \
+RUN for policy_xml in /etc/ImageMagick-6/policy.xml; do \
       [ -f "$policy_xml" ] && sed -i \
         -e 's/rights="none" pattern="PDF"/rights="read|write" pattern="PDF"/g' \
         -e 's/rights="none" pattern="PS"/rights="read|write" pattern="PS"/g' \
@@ -40,7 +38,7 @@ RUN for policy_xml in /etc/ImageMagick-7/policy.xml /etc/ImageMagick-6/policy.xm
     done
 
 # メモリ制限を引き上げて大きな AI ファイルを処理できるようにする
-RUN for policy_xml in /etc/ImageMagick-7/policy.xml /etc/ImageMagick-6/policy.xml; do \
+RUN for policy_xml in /etc/ImageMagick-6/policy.xml; do \
       [ -f "$policy_xml" ] && sed -i \
         -e 's/<policy domain="resource" name="memory" value="[^"]*"\/>/<policy domain="resource" name="memory" value="2GiB"\/>/' \
         -e 's/<policy domain="resource" name="disk" value="[^"]*"\/>/<policy domain="resource" name="disk" value="4GiB"\/>/' \
