@@ -1,15 +1,33 @@
-# Lambda用Dockerイメージ（Amazon Linux 2023ベース）
-FROM public.ecr.aws/lambda/python:3.11
+# Stage 1: AL2023でシステムパッケージをインストール
+FROM amazonlinux:2023 AS builder
 
-# ImageMagick と依存パッケージのインストール
-RUN microdnf install -y \
+RUN dnf install -y \
     ImageMagick \
     ImageMagick-devel \
     ghostscript \
     lcms2 \
     lcms2-devel \
     gcc \
-    && microdnf clean all
+    python3.11-devel \
+    && dnf clean all
+
+# Stage 2: Lambda実行環境
+FROM public.ecr.aws/lambda/python:3.11
+
+# ImageMagick / Ghostscript のバイナリとライブラリをコピー
+COPY --from=builder /usr/bin/convert      /opt/bin/convert
+COPY --from=builder /usr/bin/identify     /opt/bin/identify
+COPY --from=builder /usr/bin/gs           /opt/bin/gs
+COPY --from=builder /usr/lib64            /opt/lib64
+COPY --from=builder /usr/share/ghostscript /usr/share/ghostscript
+COPY --from=builder /usr/share/color      /usr/share/color
+
+# ImageMagick のポリシーファイルをコピー
+COPY --from=builder /etc/ImageMagick-6    /etc/ImageMagick-6
+COPY --from=builder /etc/ImageMagick-7    /etc/ImageMagick-7
+
+ENV PATH="/opt/bin:${PATH}"
+ENV LD_LIBRARY_PATH="/opt/lib64:${LD_LIBRARY_PATH}"
 
 # ImageMagick のポリシーを変更して PDF/AI/EPS/PS 処理を許可
 RUN for policy_xml in /etc/ImageMagick-7/policy.xml /etc/ImageMagick-6/policy.xml; do \
@@ -35,8 +53,8 @@ RUN pip install --no-cache-dir -r ${LAMBDA_TASK_ROOT}/requirements-lambda.txt
 
 # アプリケーションコードのコピー
 COPY app/ ${LAMBDA_TASK_ROOT}/app/
+COPY iccprofiles/ ${LAMBDA_TASK_ROOT}/iccprofiles/
 COPY lambda_handler.py ${LAMBDA_TASK_ROOT}/
 COPY worker_handler.py ${LAMBDA_TASK_ROOT}/
 
-# Lambda関数のデフォルトハンドラー（デプロイ時に上書き可能）
 CMD ["lambda_handler.handler"]
