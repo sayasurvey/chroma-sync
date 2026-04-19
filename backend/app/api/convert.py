@@ -1,4 +1,5 @@
 import io
+import uuid
 import zipfile
 from pathlib import Path
 from typing import Any
@@ -28,43 +29,89 @@ def _validate_file(filename: str) -> None:
         )
 
 
+@router.post("/presign-upload")
+async def presign_upload(
+    filename: str = Form(...),
+) -> dict[str, Any]:
+    """S3への直接アップロード用の署名付きURLを返す（API Gateway 10MB 制限回避用）。
+
+    大きなファイル（>8MB）はこのエンドポイントで URL を取得し、
+    クライアントから直接 S3 に PUT してから /convert に s3_key を渡す。
+    """
+    if not settings.use_aws:
+        raise HTTPException(status_code=400, detail="ローカルモードでは使用できません")
+
+    _validate_file(filename)
+
+    from app.services.storage import S3Storage
+
+    storage = S3Storage(settings.s3_bucket, settings.aws_region)
+    job_id = str(uuid.uuid4())
+    upload_url, s3_key = storage.generate_presigned_upload_url(filename, job_id)
+
+    return {"upload_url": upload_url, "s3_key": s3_key, "job_id": job_id}
+
+
 @router.post("/convert")
 async def start_conversion(
-    file: UploadFile = File(...),
+    file: UploadFile | None = File(default=None),
+    s3_key: str | None = Form(default=None),
+    original_filename: str | None = Form(default=None),
     target_size_kb: int | None = Form(None),
     quality: int = Form(settings.default_quality),
     max_delta_e: float = Form(settings.max_delta_e),
 ) -> dict[str, Any]:
-    """ファイルをアップロードして変換ジョブを開始する"""
-    _validate_file(file.filename or "")
+    """ファイルをアップロードして変換ジョブを開始する。
 
-    content = await file.read()
-    if len(content) > settings.max_upload_size_mb * 1024 * 1024:
-        raise HTTPException(
-            status_code=413,
-            detail=f"ファイルサイズが大きすぎます。{settings.max_upload_size_mb}MB以下のファイルをご使用ください",
-        )
-
+    2つのモードをサポート:
+    1. 直接アップロード: file パラメータでファイルを送信（最大 8MB）
+    2. S3キー指定: /presign-upload で取得した s3_key を指定（大きなファイル用）
+    """
     options = ConversionOptions(
         target_size_kb=target_size_kb,
         quality=quality,
         max_delta_e=max_delta_e,
     )
-    original_filename = file.filename or "upload"
 
     if settings.use_aws:
-        # AWSモード: S3にアップロードしてSQSキューに投入
         from app.services.storage import S3Storage
-        import uuid
 
         storage = S3Storage(settings.s3_bucket, settings.aws_region)
-        job_id = str(uuid.uuid4())
-        input_s3_key = await storage.save_upload(content, original_filename, job_id)
-        job = await job_queue.enqueue(input_s3_key, options, original_filename)
+
+        if s3_key:
+            # Presigned URL アップロード済みファイルをそのまま使用
+            if not original_filename:
+                raise HTTPException(status_code=422, detail="original_filename が必要です")
+            _validate_file(original_filename)
+            job = await job_queue.enqueue(s3_key, options, original_filename)
+        elif file is not None:
+            # 直接アップロード（8MB 以下）
+            _validate_file(file.filename or "")
+            content = await file.read()
+            if len(content) > settings.max_upload_size_mb * 1024 * 1024:
+                raise HTTPException(
+                    status_code=413,
+                    detail=f"ファイルサイズが大きすぎます。{settings.max_upload_size_mb}MB以下のファイルをご使用ください",
+                )
+            fname = file.filename or "upload"
+            job_id = str(uuid.uuid4())
+            input_s3_key = await storage.save_upload(content, fname, job_id)
+            job = await job_queue.enqueue(input_s3_key, options, fname)
+        else:
+            raise HTTPException(status_code=422, detail="file または s3_key を指定してください")
     else:
-        # ローカルモード: ローカルファイルシステムに保存
-        input_path = await file_manager.save_upload(content, original_filename)
-        job = await job_queue.enqueue(input_path, options, original_filename)
+        # ローカルモード
+        if file is None:
+            raise HTTPException(status_code=422, detail="ローカルモードでは file が必要です")
+        _validate_file(file.filename or "")
+        content = await file.read()
+        if len(content) > settings.max_upload_size_mb * 1024 * 1024:
+            raise HTTPException(
+                status_code=413,
+                detail=f"ファイルサイズが大きすぎます。{settings.max_upload_size_mb}MB以下のファイルをご使用ください",
+            )
+        input_path = await file_manager.save_upload(content, file.filename or "upload")
+        job = await job_queue.enqueue(input_path, options, file.filename or "upload")
 
     return {"job_id": job.job_id, "status": job.status}
 

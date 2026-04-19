@@ -8,6 +8,9 @@ import botocore
 class S3Storage:
     """S3ベースのファイルストレージ"""
 
+    # API Gateway の 10MB ペイロード制限を回避するための閾値
+    DIRECT_UPLOAD_LIMIT_BYTES = 8 * 1024 * 1024  # 8MB
+
     def __init__(self, bucket: str, region: str = "ap-northeast-1") -> None:
         self.bucket = bucket
         self.s3 = boto3.client("s3", region_name=region)
@@ -39,6 +42,26 @@ class S3Storage:
     def upload_from_path(self, local_path: str, key: str) -> None:
         """ローカルファイルをS3にアップロードする。"""
         self.s3.upload_file(local_path, self.bucket, key, ExtraArgs={"ContentType": "image/jpeg"})
+
+    def generate_presigned_upload_url(
+        self, filename: str, job_id: str, expires_in: int = 300
+    ) -> tuple[str, str]:
+        """S3への直接アップロード用の署名付きURLを生成する。
+
+        API Gateway の 10MB 制限を超えるファイルに使用する。
+
+        Returns:
+            (upload_url, s3_key) のタプル
+        """
+        ext = Path(filename).suffix.lower()
+        key = f"input/{job_id}/{uuid.uuid4().hex}{ext}"
+        upload_url = self.s3.generate_presigned_url(
+            "put_object",
+            Params={"Bucket": self.bucket, "Key": key},
+            ExpiresIn=expires_in,
+            HttpMethod="PUT",
+        )
+        return upload_url, key
 
     def generate_presigned_url(self, key: str, expires_in: int = 3600) -> str:
         """S3オブジェクトの署名付きURLを生成する。

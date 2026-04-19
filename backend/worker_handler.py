@@ -135,12 +135,12 @@ def _process_job(
 
         except Exception as e:
             logger.exception("ジョブ %s の変換中にエラーが発生しました", job_id)
+            error_detail = str(e) if str(e) else type(e).__name__
             repo.update_job_status(
                 job_id=job_id,
                 status="failed",
                 progress=0,
                 progress_message="変換失敗",
-                error="変換中にエラーが発生しました。しばらく経ってから再度お試しください。",
+                error=f"変換中にエラーが発生しました: {error_detail}",
             )
             storage.delete_object(input_s3_key)
-            raise
