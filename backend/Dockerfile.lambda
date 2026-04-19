@@ -2,14 +2,14 @@
 FROM public.ecr.aws/lambda/python:3.11
 
 # ImageMagick と依存パッケージのインストール
-RUN dnf install -y \
+RUN microdnf install -y \
     ImageMagick \
     ImageMagick-devel \
     ghostscript \
     lcms2 \
     lcms2-devel \
     gcc \
-    && dnf clean all
+    && microdnf clean all
 
 # ImageMagick のポリシーを変更して PDF/AI/EPS/PS 処理を許可
 RUN for policy_xml in /etc/ImageMagick-7/policy.xml /etc/ImageMagick-6/policy.xml; do \
